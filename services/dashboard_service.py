@@ -18,12 +18,14 @@ class DashboardService:
             data_config = chart_config.get("data_config", {})
             source_columns = data_config.get("source_columns", [])
             aggregation = data_config.get("aggregation", "count")
-            limit = data_config.get("limit", 10)
+            limit = data_config.get("limit", 15)
             sort_order = data_config.get("sort", "desc")
+            show_percentages = data_config.get("show_percentages", False)
+            group_by = data_config.get("group_by", None)
 
             if not source_columns or not all(col in df.columns for col in source_columns):
                 # Fallback to first available columns
-                if chart_type in ["bar", "pie"] and len(df.select_dtypes(include=['object']).columns) > 0:
+                if chart_type in ["bar", "pie", "doughnut"] and len(df.select_dtypes(include=['object']).columns) > 0:
                     source_columns = [df.select_dtypes(include=['object']).columns[0]]
                     aggregation = "count"
                 elif len(df.select_dtypes(include=['number']).columns) > 0:
@@ -32,12 +34,16 @@ class DashboardService:
                 else:
                     return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
 
-            if chart_type in ["bar", "pie"]:
-                return self._generate_bar_pie_chart_data(df, source_columns, aggregation, limit, sort_order, chart_config)
+            if chart_type in ["bar", "pie", "doughnut"]:
+                return self._generate_bar_pie_chart_data(df, source_columns, aggregation, limit, sort_order, chart_config, show_percentages)
             elif chart_type == "line":
-                return self._generate_line_chart_data(df, source_columns, limit)
+                return self._generate_line_chart_data(df, source_columns, limit, chart_config)
+            elif chart_type == "area":
+                return self._generate_area_chart_data(df, source_columns, limit, chart_config)
             elif chart_type == "scatter":
-                return self._generate_scatter_chart_data(df, source_columns)
+                return self._generate_scatter_chart_data(df, source_columns, chart_config)
+            elif chart_type == "heatmap":
+                return self._generate_heatmap_data(df, source_columns, chart_config)
 
             # Default fallback
             return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
@@ -47,13 +53,21 @@ class DashboardService:
             return {"labels": ["Error"], "datasets": [{"data": [0]}]}
 
     def _generate_bar_pie_chart_data(self, df: pd.DataFrame, source_columns: list, aggregation: str,
-                                   limit: int, sort_order: str, chart_config: dict) -> dict:
-        """Generate data for bar and pie charts"""
+                                   limit: int, sort_order: str, chart_config: dict, show_percentages: bool = False) -> dict:
+        """Generate data for bar, pie, and doughnut charts with enhanced percentage support"""
+        chart_type = chart_config.get("chart_type", "bar")
+
         # Categorical data aggregation
         if aggregation == "count":
             result = df[source_columns[0]].value_counts().head(limit)
+        elif aggregation == "percentage":
+            result = df[source_columns[0]].value_counts(normalize=True) * 100
+            result = result.head(limit)
         else:
-            result = df.groupby(source_columns[0])[source_columns[1]].agg(aggregation).head(limit) if len(source_columns) > 1 else df[source_columns[0]].value_counts().head(limit)
+            if len(source_columns) > 1:
+                result = df.groupby(source_columns[0])[source_columns[1]].agg(aggregation).head(limit)
+            else:
+                result = df[source_columns[0]].value_counts().head(limit)
 
         if sort_order == "asc":
             result = result.sort_values()
@@ -62,66 +76,192 @@ class DashboardService:
         labels = make_json_serializable(result.index.tolist())
         values = make_json_serializable(result.values.tolist())
 
-        # Color schemes
+        # For pie charts, calculate percentages
+        if chart_type in ["pie", "doughnut"] or show_percentages:
+            total = sum(values)
+            if total > 0:
+                percentages = [(v/total)*100 for v in values]
+                # Add percentage labels
+                labels_with_percentages = [f"{label} ({perc:.1f}%)" for label, perc in zip(labels, percentages)]
+            else:
+                percentages = values
+                labels_with_percentages = labels
+        else:
+            labels_with_percentages = labels
+            percentages = values
+
+        # Enhanced color schemes with more variety
         color_schemes = {
-            "primary": ["rgba(59, 130, 246, 0.8)", "rgba(99, 102, 241, 0.8)", "rgba(139, 92, 246, 0.8)"],
-            "secondary": ["rgba(107, 114, 128, 0.8)", "rgba(156, 163, 175, 0.8)", "rgba(209, 213, 219, 0.8)"],
-            "success": ["rgba(34, 197, 94, 0.8)", "rgba(22, 163, 74, 0.8)", "rgba(21, 128, 61, 0.8)"],
-            "warning": ["rgba(245, 158, 11, 0.8)", "rgba(217, 119, 6, 0.8)", "rgba(180, 83, 9, 0.8)"],
-            "info": ["rgba(6, 182, 212, 0.8)", "rgba(14, 165, 233, 0.8)", "rgba(37, 99, 235, 0.8)"]
+            "primary": [
+                "rgba(59, 130, 246, 0.8)", "rgba(99, 102, 241, 0.8)", "rgba(139, 92, 246, 0.8)",
+                "rgba(168, 85, 247, 0.8)", "rgba(236, 72, 153, 0.8)", "rgba(239, 68, 68, 0.8)",
+                "rgba(245, 158, 11, 0.8)", "rgba(34, 197, 94, 0.8)", "rgba(6, 182, 212, 0.8)",
+                "rgba(156, 163, 175, 0.8)"
+            ],
+            "success": [
+                "rgba(34, 197, 94, 0.8)", "rgba(22, 163, 74, 0.8)", "rgba(21, 128, 61, 0.8)",
+                "rgba(20, 83, 45, 0.8)", "rgba(134, 239, 172, 0.8)", "rgba(74, 222, 128, 0.8)"
+            ],
+            "warning": [
+                "rgba(245, 158, 11, 0.8)", "rgba(217, 119, 6, 0.8)", "rgba(180, 83, 9, 0.8)",
+                "rgba(146, 64, 14, 0.8)", "rgba(251, 191, 36, 0.8)", "rgba(252, 211, 77, 0.8)"
+            ],
+            "info": [
+                "rgba(6, 182, 212, 0.8)", "rgba(14, 165, 233, 0.8)", "rgba(37, 99, 235, 0.8)",
+                "rgba(67, 56, 202, 0.8)", "rgba(103, 232, 249, 0.8)", "rgba(125, 211, 252, 0.8)"
+            ],
+            "custom": [
+                "rgba(255, 99, 132, 0.8)", "rgba(54, 162, 235, 0.8)", "rgba(255, 205, 86, 0.8)",
+                "rgba(75, 192, 192, 0.8)", "rgba(153, 102, 255, 0.8)", "rgba(255, 159, 64, 0.8)",
+                "rgba(199, 199, 199, 0.8)", "rgba(83, 102, 255, 0.8)", "rgba(255, 99, 255, 0.8)",
+                "rgba(99, 255, 132, 0.8)"
+            ]
         }
 
         scheme = chart_config.get("color_scheme", "primary")
         colors = color_schemes.get(scheme, color_schemes["primary"])
 
-        return make_json_serializable({
-            "labels": labels,
+        # Ensure we have enough colors
+        extended_colors = colors * (len(values) // len(colors) + 1)
+
+        chart_data = {
+            "labels": labels_with_percentages if chart_type in ["pie", "doughnut"] else labels,
             "datasets": [{
                 "label": chart_config.get("title", "Data"),
                 "data": values,
-                "backgroundColor": colors * (len(values) // len(colors) + 1),
-                "borderColor": [c.replace("0.8", "1") for c in colors] * (len(values) // len(colors) + 1),
-                "borderWidth": 1
+                "backgroundColor": extended_colors[:len(values)],
+                "borderColor": [c.replace("0.8", "1") for c in extended_colors[:len(values)]],
+                "borderWidth": 2 if chart_type in ["pie", "doughnut"] else 1
             }]
-        })
+        }
 
-    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int) -> dict:
-        """Generate data for line charts"""
+        # Add percentage data for pie charts
+        if chart_type in ["pie", "doughnut"]:
+            chart_data["datasets"][0]["percentages"] = percentages
+
+        return make_json_serializable(chart_data)
+
+    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int, chart_config: dict) -> dict:
+        """Generate data for line charts with enhanced time series support"""
         column = source_columns[0]
-        data = df[column].dropna().head(limit)
 
+        # Check if we have a date column for time series
+        if len(source_columns) > 1:
+            # Try to create time series data
+            try:
+                date_col = source_columns[0]
+                value_col = source_columns[1]
+
+                # Convert to datetime if possible
+                df_temp = df.copy()
+                df_temp[date_col] = pd.to_datetime(df_temp[date_col], errors='coerce')
+                df_temp = df_temp.dropna(subset=[date_col, value_col])
+
+                if not df_temp.empty:
+                    # Group by date and aggregate
+                    df_grouped = df_temp.groupby(df_temp[date_col].dt.date)[value_col].sum().head(limit)
+
+                    return make_json_serializable({
+                        "labels": [str(date) for date in df_grouped.index],
+                        "datasets": [{
+                            "label": f"{value_col} over time",
+                            "data": df_grouped.values.tolist(),
+                            "borderColor": "rgba(34, 197, 94, 1)",
+                            "backgroundColor": "rgba(34, 197, 94, 0.1)",
+                            "tension": 0.4,
+                            "fill": False
+                        }]
+                    })
+            except:
+                pass
+
+        # Fallback to simple line chart
+        data = df[column].dropna().head(limit)
         return make_json_serializable({
-            "labels": [str(i) for i in range(len(data))],
+            "labels": [str(i+1) for i in range(len(data))],
             "datasets": [{
                 "label": column,
                 "data": data.tolist(),
                 "borderColor": "rgba(34, 197, 94, 1)",
                 "backgroundColor": "rgba(34, 197, 94, 0.1)",
-                "tension": 0.4
+                "tension": 0.4,
+                "fill": False
             }]
         })
 
-    def _generate_scatter_chart_data(self, df: pd.DataFrame, source_columns: list) -> dict:
-        """Generate data for scatter charts"""
+    def _generate_area_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int, chart_config: dict) -> dict:
+        """Generate data for area charts"""
+        column = source_columns[0]
+        data = df[column].dropna().head(limit)
+
+        return make_json_serializable({
+            "labels": [str(i+1) for i in range(len(data))],
+            "datasets": [{
+                "label": column,
+                "data": data.tolist(),
+                "borderColor": "rgba(59, 130, 246, 1)",
+                "backgroundColor": "rgba(59, 130, 246, 0.3)",
+                "tension": 0.4,
+                "fill": True
+            }]
+        })
+
+    def _generate_scatter_chart_data(self, df: pd.DataFrame, source_columns: list, chart_config: dict) -> dict:
+        """Generate data for scatter charts with correlation analysis"""
         if len(source_columns) >= 2:
-            x_data = df[source_columns[0]].dropna()
-            y_data = df[source_columns[1]].dropna()
-            min_len = min(len(x_data), len(y_data))
+            x_col = source_columns[0]
+            y_col = source_columns[1]
 
-            scatter_data = []
-            for i in range(min_len):
-                scatter_data.append({
-                    "x": make_json_serializable(x_data.iloc[i]),
-                    "y": make_json_serializable(y_data.iloc[i])
+            # Filter numeric data
+            df_clean = df[[x_col, y_col]].dropna()
+            df_clean = df_clean.select_dtypes(include=['number'])
+
+            if len(df_clean) > 0:
+                scatter_data = []
+                for _, row in df_clean.head(100).iterrows():  # Limit to 100 points for performance
+                    scatter_data.append({
+                        "x": make_json_serializable(row[x_col]),
+                        "y": make_json_serializable(row[y_col])
+                    })
+
+                # Calculate correlation
+                correlation = df_clean[x_col].corr(df_clean[y_col])
+
+                return {
+                    "datasets": [{
+                        "label": f"{x_col} vs {y_col} (r={correlation:.3f})",
+                        "data": scatter_data,
+                        "backgroundColor": "rgba(59, 130, 246, 0.6)",
+                        "borderColor": "rgba(59, 130, 246, 1)",
+                        "pointRadius": 4
+                    }]
+                }
+
+        return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
+
+    def _generate_heatmap_data(self, df: pd.DataFrame, source_columns: list, chart_config: dict) -> dict:
+        """Generate data for heatmap visualization"""
+        # This is a simplified heatmap - in a real implementation, you'd use a proper heatmap library
+        if len(source_columns) >= 2:
+            try:
+                # Create a pivot table for heatmap
+                pivot_data = df.pivot_table(
+                    values=source_columns[1] if len(source_columns) > 1 else None,
+                    index=source_columns[0],
+                    aggfunc='count'
+                ).fillna(0)
+
+                return make_json_serializable({
+                    "labels": pivot_data.index.tolist(),
+                    "datasets": [{
+                        "label": "Intensity",
+                        "data": pivot_data.values.flatten().tolist(),
+                        "backgroundColor": "rgba(59, 130, 246, 0.8)"
+                    }]
                 })
+            except:
+                pass
 
-            return {
-                "datasets": [{
-                    "label": f"{source_columns[0]} vs {source_columns[1]}",
-                    "data": scatter_data,
-                    "backgroundColor": "rgba(59, 130, 246, 0.6)"
-                }]
-            }
         return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
 
     async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str) -> DashboardConfig:
