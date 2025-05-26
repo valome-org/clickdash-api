@@ -19,7 +19,7 @@ def test_gemini():
         genai.configure(api_key=api_key)
 
         # Initialize model
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         # Test with a simple prompt
         response = model.generate_content("Hello! Please respond with just 'Hello from Gemini!'")
