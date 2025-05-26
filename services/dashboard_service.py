@@ -32,25 +32,38 @@ class DashboardService:
                     source_columns = [df.select_dtypes(include=['number']).columns[0]]
                     aggregation = "sum"
                 else:
-                    return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
+                    return {
+                        "labels": ["No Data"],
+                        "datasets": [{
+                            "label": "No Data",
+                            "data": [0],
+                            "backgroundColor": ["rgba(156, 163, 175, 0.8)"],
+                            "borderColor": ["rgba(156, 163, 175, 1)"],
+                            "borderWidth": 1
+                        }]
+                    }
 
             if chart_type in ["bar", "pie", "doughnut"]:
                 return self._generate_bar_pie_chart_data(df, source_columns, aggregation, limit, sort_order, chart_config, show_percentages)
             elif chart_type == "line":
                 return self._generate_line_chart_data(df, source_columns, limit, chart_config)
-            elif chart_type == "area":
-                return self._generate_area_chart_data(df, source_columns, limit, chart_config)
-            elif chart_type == "scatter":
-                return self._generate_scatter_chart_data(df, source_columns, chart_config)
-            elif chart_type == "heatmap":
-                return self._generate_heatmap_data(df, source_columns, chart_config)
 
-            # Default fallback
-            return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
+            # Default to bar chart for any other type
+            return self._generate_bar_pie_chart_data(df, source_columns, "count", limit, sort_order, chart_config, show_percentages)
 
         except Exception as e:
             print(f"Chart data generation error: {str(e)}")
-            return {"labels": ["Error"], "datasets": [{"data": [0]}]}
+            # Return a safe fallback structure
+            return {
+                "labels": ["No Data"],
+                "datasets": [{
+                    "label": "No Data",
+                    "data": [0],
+                    "backgroundColor": ["rgba(156, 163, 175, 0.8)"],
+                    "borderColor": ["rgba(156, 163, 175, 1)"],
+                    "borderWidth": 1
+                }]
+            }
 
     def _generate_bar_pie_chart_data(self, df: pd.DataFrame, source_columns: list, aggregation: str,
                                    limit: int, sort_order: str, chart_config: dict, show_percentages: bool = False) -> dict:
@@ -188,81 +201,6 @@ class DashboardService:
                 "fill": False
             }]
         })
-
-    def _generate_area_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int, chart_config: dict) -> dict:
-        """Generate data for area charts"""
-        column = source_columns[0]
-        data = df[column].dropna().head(limit)
-
-        return make_json_serializable({
-            "labels": [str(i+1) for i in range(len(data))],
-            "datasets": [{
-                "label": column,
-                "data": data.tolist(),
-                "borderColor": "rgba(59, 130, 246, 1)",
-                "backgroundColor": "rgba(59, 130, 246, 0.3)",
-                "tension": 0.4,
-                "fill": True
-            }]
-        })
-
-    def _generate_scatter_chart_data(self, df: pd.DataFrame, source_columns: list, chart_config: dict) -> dict:
-        """Generate data for scatter charts with correlation analysis"""
-        if len(source_columns) >= 2:
-            x_col = source_columns[0]
-            y_col = source_columns[1]
-
-            # Filter numeric data
-            df_clean = df[[x_col, y_col]].dropna()
-            df_clean = df_clean.select_dtypes(include=['number'])
-
-            if len(df_clean) > 0:
-                scatter_data = []
-                for _, row in df_clean.head(100).iterrows():  # Limit to 100 points for performance
-                    scatter_data.append({
-                        "x": make_json_serializable(row[x_col]),
-                        "y": make_json_serializable(row[y_col])
-                    })
-
-                # Calculate correlation
-                correlation = df_clean[x_col].corr(df_clean[y_col])
-
-                return {
-                    "datasets": [{
-                        "label": f"{x_col} vs {y_col} (r={correlation:.3f})",
-                        "data": scatter_data,
-                        "backgroundColor": "rgba(59, 130, 246, 0.6)",
-                        "borderColor": "rgba(59, 130, 246, 1)",
-                        "pointRadius": 4
-                    }]
-                }
-
-        return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
-
-    def _generate_heatmap_data(self, df: pd.DataFrame, source_columns: list, chart_config: dict) -> dict:
-        """Generate data for heatmap visualization"""
-        # This is a simplified heatmap - in a real implementation, you'd use a proper heatmap library
-        if len(source_columns) >= 2:
-            try:
-                # Create a pivot table for heatmap
-                pivot_data = df.pivot_table(
-                    values=source_columns[1] if len(source_columns) > 1 else None,
-                    index=source_columns[0],
-                    aggfunc='count'
-                ).fillna(0)
-
-                return make_json_serializable({
-                    "labels": pivot_data.index.tolist(),
-                    "datasets": [{
-                        "label": "Intensity",
-                        "data": pivot_data.values.flatten().tolist(),
-                        "backgroundColor": "rgba(59, 130, 246, 0.8)"
-                    }]
-                })
-            except:
-                pass
-
-        return {"labels": ["No Data"], "datasets": [{"data": [0]}]}
 
     async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str) -> DashboardConfig:
         """Generate complete dashboard using LLM analysis"""

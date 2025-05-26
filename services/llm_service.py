@@ -148,13 +148,14 @@ class LLMService:
         5. **Visual Appeal**: Choose appropriate color schemes and ensure charts are visually distinct
         6. **Data-Driven**: Base recommendations on actual data patterns, correlations, and distributions
 
-        CHART TYPE GUIDELINES:
-        - **Pie/Doughnut**: For categorical distributions with percentages (ensure percentages add to 100%)
-        - **Bar**: For comparisons, rankings, and categorical data
-        - **Line**: For trends over time or sequential data
-        - **Scatter**: For correlations between numeric variables
-        - **Area**: For cumulative data or trends with magnitude
-        - **Heatmap**: For correlation matrices or intensity data
+        CHART SELECTION GUIDELINES:
+        - Use BAR charts for comparing categories (sales by region, top products)
+        - Use PIE charts for showing parts of a whole (market share, budget allocation) - limit to 6 categories max
+        - Use LINE charts for showing trends over time (monthly sales, growth patterns)
+        - AVOID scatter plots and correlation charts - they are too complex for business users
+        - Focus on simple, clear visualizations that tell a story
+        - Prioritize the most business-relevant insights
+        - Limit to 3-4 charts maximum for better readability
 
         Return your response as a JSON object with this EXACT structure:
         {{

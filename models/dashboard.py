@@ -9,8 +9,8 @@ from pydantic import BaseModel
 class ChartConfig(BaseModel):
     chart_type: str
     title: str
-    x_axis: str
-    y_axis: str
+    x_axis: Optional[str] = None
+    y_axis: Optional[str] = None
     data: dict
     insights: Optional[str] = None
     color_scheme: Optional[str] = None
