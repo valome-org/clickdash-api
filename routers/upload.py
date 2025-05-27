@@ -2,13 +2,15 @@ import uuid
 from datetime import datetime
 
 import pandas as pd
-from config.settings import dashboards_storage
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from database.connection import get_db
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, HTTPException,
+                     UploadFile)
 from models.upload import UploadResponse
 from services.dashboard_service import DashboardService
 from services.data_analysis import analyze_excel_data
+from services.database_service import DatabaseService
+from sqlalchemy.orm import Session
 from utils.file_handling import save_uploaded_file, validate_excel_file
-from utils.serialization import make_json_serializable
 
 router = APIRouter()
 
@@ -16,7 +18,8 @@ router = APIRouter()
 @router.post("/upload", response_model=UploadResponse)
 async def upload_excel_file(
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
 ):
     """Upload and process Excel file to generate dashboard"""
     try:
@@ -32,34 +35,32 @@ async def upload_excel_file(
 
         # Generate dashboard using LLM
         dashboard_service = DashboardService()
-        dashboard_config = await dashboard_service.generate_llm_dashboard(df, analysis, file.filename or "Unknown")
+        dashboard_config = await dashboard_service.generate_llm_dashboard(
+            df, analysis, file.filename or "Unknown"
+        )
 
         print(f"Dashboard config generated:")
         print(dashboard_config)
 
         # Create dashboard ID
         dashboard_id = str(uuid.uuid4())
-        created_at = datetime.now().isoformat()
+        file_url = f"/uploads/{file_path.name}"
 
-        # Ensure all data is JSON serializable before storage
-        serializable_config = make_json_serializable(dashboard_config.dict())
+        # Save to database
+        db_service = DatabaseService(db)
+        db_dashboard = db_service.create_dashboard(
+            dashboard_id=dashboard_id,
+            dashboard_config=dashboard_config,
+            file_url=file_url
+        )
 
-        # Store dashboard in memory (TODO: Save to database)
-        dashboards_storage[dashboard_id] = make_json_serializable({
-            "dashboard_id": dashboard_id,
-            "dashboard_config": serializable_config,
-            "status": "ready",
-            "created_at": created_at,
-            "file_url": f"/uploads/{file_path.name}"
-        })
-
-        # Create response with serialized data
+        # Create response
         response = UploadResponse(
             status="success",
             dashboard_id=dashboard_id,
             dashboard_config=dashboard_config,
-            file_url=f"/uploads/{file_path.name}",
-            created_at=created_at
+            file_url=file_url,
+            created_at=db_dashboard.created_at.isoformat()
         )
 
         return response

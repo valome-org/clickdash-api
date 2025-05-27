@@ -13,8 +13,11 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # File size limit (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
-# In-memory storage for dashboards (TODO: Replace with database)
-dashboards_storage = {}
+# Database Configuration
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres@localhost:5432/clickdash_db"
+)
 
 # LLM Configuration
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini").lower()

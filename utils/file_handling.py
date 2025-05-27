@@ -31,7 +31,6 @@ def save_uploaded_file(file: UploadFile) -> Path:
     """Save uploaded file to disk with proper error handling"""
     # Generate unique filename
     file_id = str(uuid.uuid4())
-    file_extension = Path(file.filename or "file.xlsx").suffix
     filename = f"{file_id}_{file.filename}"
     file_path = UPLOAD_DIR / filename
 

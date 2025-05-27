@@ -1,11 +1,16 @@
 from datetime import datetime
 
 from config.settings import (APP_DESCRIPTION, APP_TITLE, APP_VERSION,
-                             CORS_ORIGINS)
+                             CORS_ORIGINS, UPLOAD_DIR)
+from database import create_tables
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from routers import dashboard_router, models_router, upload_router
 from utils.serialization import CustomJSONResponse
+
+# Initialize database tables
+create_tables()
 
 # Create FastAPI app with custom JSON response
 app = FastAPI(
@@ -28,6 +33,9 @@ app.add_middleware(
 app.include_router(upload_router, tags=["upload"])
 app.include_router(dashboard_router, tags=["dashboard"])
 app.include_router(models_router, tags=["models"])
+
+# Serve uploaded files
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/health")

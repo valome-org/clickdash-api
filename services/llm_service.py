@@ -15,10 +15,10 @@ class LLMService:
     def __init__(self):
         # Initialize LLM clients
         self.openai_client = None
-        if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "your-openai-api-key-here":
+        if os.getenv("OPENAI_API_KEY"):
             self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        if os.getenv("GOOGLE_API_KEY") and os.getenv("GOOGLE_API_KEY") != "your-google-api-key-here":
+        if os.getenv("GOOGLE_API_KEY"):
             genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
     async def analyze_data_with_llm(self, df: pd.DataFrame, analysis: dict, filename: str) -> Dict[str, Any]:
@@ -113,12 +113,12 @@ class LLMService:
 
         try:
             # Try primary model first (from environment configuration)
-            if LLM_MODEL == "gemini" and os.getenv("GOOGLE_API_KEY") and os.getenv("GOOGLE_API_KEY") != "your-google-api-key-here":
+            if LLM_MODEL == "gemini" and os.getenv("GOOGLE_API_KEY"):
                 return await self._analyze_with_gemini(prompt)
             elif LLM_MODEL == "openai" and self.openai_client:
                 return await self._analyze_with_openai(prompt)
             # Fallback to available model
-            elif os.getenv("GOOGLE_API_KEY") and os.getenv("GOOGLE_API_KEY") != "your-google-api-key-here":
+            elif os.getenv("GOOGLE_API_KEY"):
                 return await self._analyze_with_gemini(prompt)
             elif self.openai_client:
                 return await self._analyze_with_openai(prompt)
