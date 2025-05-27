@@ -1,6 +1,6 @@
 from typing import Optional
 
-from database.models import Dashboard
+from database.models import Dashboard, User
 from models.dashboard import DashboardConfig
 from sqlalchemy.orm import Session
 from utils.serialization import make_json_serializable
@@ -16,6 +16,7 @@ class DatabaseService:
         self,
         dashboard_id: str,
         dashboard_config: DashboardConfig,
+        user: User,
         file_url: Optional[str] = None
     ) -> Dashboard:
         """Create a new dashboard in the database"""
@@ -31,7 +32,8 @@ class DatabaseService:
             summary=dashboard_config.summary,
             key_metrics=serializable_config["key_metrics"],
             file_url=file_url,
-            status="ready"
+            status="ready",
+            user_id=user.id
         )
 
         self.db.add(db_dashboard)
@@ -40,19 +42,33 @@ class DatabaseService:
 
         return db_dashboard
 
-    def get_dashboard(self, dashboard_id: str) -> Optional[Dashboard]:
-        """Get dashboard by ID"""
-        return self.db.query(Dashboard).filter(
-            Dashboard.dashboard_id == dashboard_id
-        ).first()
+    def get_dashboard(self, dashboard_id: str, user: Optional[User] = None) -> Optional[Dashboard]:
+        """Get dashboard by ID, optionally filtered by user"""
+        query = self.db.query(Dashboard).filter(Dashboard.dashboard_id == dashboard_id)
+
+        if user:
+            query = query.filter(Dashboard.user_id == user.id)
+
+        return query.first()
+
+    def get_user_dashboards(self, user: User, limit: int = 100, offset: int = 0):
+        """Get all dashboards for a specific user"""
+        return (
+            self.db.query(Dashboard)
+            .filter(Dashboard.user_id == user.id)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
     def update_dashboard(
         self,
         dashboard_id: str,
-        dashboard_config: DashboardConfig
+        dashboard_config: DashboardConfig,
+        user: User
     ) -> Optional[Dashboard]:
-        """Update an existing dashboard"""
-        db_dashboard = self.get_dashboard(dashboard_id)
+        """Update an existing dashboard (only if user owns it)"""
+        db_dashboard = self.get_dashboard(dashboard_id, user)
 
         if not db_dashboard:
             return None
@@ -70,9 +86,9 @@ class DatabaseService:
 
         return db_dashboard
 
-    def delete_dashboard(self, dashboard_id: str) -> bool:
-        """Delete dashboard by ID"""
-        db_dashboard = self.get_dashboard(dashboard_id)
+    def delete_dashboard(self, dashboard_id: str, user: User) -> bool:
+        """Delete dashboard by ID (only if user owns it)"""
+        db_dashboard = self.get_dashboard(dashboard_id, user)
 
         if not db_dashboard:
             return False
@@ -83,5 +99,5 @@ class DatabaseService:
         return True
 
     def list_dashboards(self, limit: int = 100, offset: int = 0):
-        """List all dashboards with pagination"""
+        """List all dashboards with pagination (admin only)"""
         return self.db.query(Dashboard).offset(offset).limit(limit).all()

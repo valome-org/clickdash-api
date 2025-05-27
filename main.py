@@ -6,7 +6,7 @@ from database import create_tables
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from routers import dashboard_router, models_router, upload_router
+from routers import auth_router, dashboard_router, models_router, upload_router
 from utils.serialization import CustomJSONResponse
 
 # Initialize database tables
@@ -30,9 +30,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(upload_router, tags=["upload"])
-app.include_router(dashboard_router, tags=["dashboard"])
-app.include_router(models_router, tags=["models"])
+app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
+app.include_router(upload_router, prefix="/api", tags=["upload"])
+app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
+app.include_router(models_router, prefix="/api", tags=["models"])
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -54,5 +55,6 @@ async def read_root():
     return {
         "message": "Excel Dashboard AI API",
         "version": APP_VERSION,
-        "status": "running"
+        "status": "running",
+        "authentication": "enabled"
     }

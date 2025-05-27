@@ -3,6 +3,8 @@ from datetime import datetime
 
 import pandas as pd
 from database.connection import get_db
+from database.models import User
+from dependencies.auth import get_current_active_user
 from fastapi import (APIRouter, BackgroundTasks, Depends, File, HTTPException,
                      UploadFile)
 from models.upload import UploadResponse
@@ -19,6 +21,7 @@ router = APIRouter()
 async def upload_excel_file(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Upload and process Excel file to generate dashboard"""
@@ -39,18 +42,19 @@ async def upload_excel_file(
             df, analysis, file.filename or "Unknown"
         )
 
-        print(f"Dashboard config generated:")
+        print(f"Dashboard config generated for user {current_user.username}:")
         print(dashboard_config)
 
         # Create dashboard ID
         dashboard_id = str(uuid.uuid4())
         file_url = f"/uploads/{file_path.name}"
 
-        # Save to database
+        # Save to database with user association
         db_service = DatabaseService(db)
         db_dashboard = db_service.create_dashboard(
             dashboard_id=dashboard_id,
             dashboard_config=dashboard_config,
+            user=current_user,
             file_url=file_url
         )
 
