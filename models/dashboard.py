@@ -3,17 +3,27 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class KeyMetric(BaseModel):
+    """Key metrics to display on dashboard"""
+    metric: str
+    value: str
+    description: Optional[str] = None
 
 
 class ChartConfig(BaseModel):
+    """Configuration for an individual chart"""
     chart_type: str
     title: str
-    x_axis: Optional[str] = None
-    y_axis: Optional[str] = None
-    data: dict
+    x_axis: str
+    y_axis: str
+    data: Dict[str, Any]
     insights: Optional[str] = None
     color_scheme: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    interactive_features: Optional[List[str]] = Field(default_factory=list)
 
     class Config:
         json_encoders = {
@@ -26,11 +36,14 @@ class ChartConfig(BaseModel):
 
 
 class DashboardConfig(BaseModel):
+    """Configuration for the entire dashboard"""
     title: str
-    charts: list[ChartConfig]
+    charts: List[ChartConfig]
     insights: str
     summary: str
-    key_metrics: List[Dict[str, Any]]
+    key_metrics: List[KeyMetric]
+    category: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
     class Config:
         json_encoders = {

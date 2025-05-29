@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import google.generativeai as genai
 import pandas as pd
@@ -21,7 +21,7 @@ class LLMService:
         if os.getenv("GOOGLE_API_KEY"):
             genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-    async def analyze_data_with_llm(self, df: pd.DataFrame, analysis: dict, filename: str) -> Dict[str, Any]:
+    async def analyze_data_with_llm(self, df: pd.DataFrame, analysis: dict, filename: str, options=None) -> Dict[str, Any]:
         """Use OpenAI or Gemini to analyze data and generate intelligent insights and chart recommendations"""
 
         # Prepare data summary for LLM with proper serialization
@@ -45,246 +45,195 @@ class LLMService:
             "outliers": {}
         }
 
-        # Enhanced statistical summaries for numeric columns
-        for col in analysis['numeric_columns']:
-            if col in df.columns:
-                col_data = df[col].dropna()
-                if len(col_data) > 0:
-                    data_summary["basic_stats"][col] = make_json_serializable({
-                        "mean": col_data.mean(),
-                        "median": col_data.median(),
-                        "std": col_data.std() if len(col_data) > 1 else 0,
-                        "min": col_data.min(),
-                        "max": col_data.max(),
-                        "unique_count": col_data.nunique(),
-                        "q25": col_data.quantile(0.25),
-                        "q75": col_data.quantile(0.75),
-                        "skewness": col_data.skew() if len(col_data) > 1 else 0,
-                        "total": col_data.sum()
-                    })
+        # Add more advanced statistics for numeric columns
+        if len(analysis['numeric_columns']) > 0:
+            numeric_stats = df[analysis['numeric_columns']].describe().to_dict()
+            data_summary["basic_stats"] = make_json_serializable(numeric_stats)
 
-        # Enhanced categorical summaries
-        for col in analysis['categorical_columns'][:5]:  # Increased to 5 categorical columns
-            if col in df.columns:
-                value_counts = df[col].value_counts()
-                data_summary["basic_stats"][col] = make_json_serializable({
-                    "top_values": value_counts.head(15).to_dict(),  # More values
-                    "unique_count": df[col].nunique(),
-                    "most_common": value_counts.index[0] if len(value_counts) > 0 else None,
-                    "most_common_percentage": (value_counts.iloc[0] / len(df) * 100) if len(value_counts) > 0 else 0,
-                    "distribution": value_counts.head(10).to_dict()
-                })
+            # Add correlation matrix for numeric columns if there are at least 2
+            if len(analysis['numeric_columns']) >= 2:
+                corr_matrix = df[analysis['numeric_columns']].corr().to_dict()
+                data_summary["correlations"] = make_json_serializable(corr_matrix)
 
-        # Add correlation analysis for numeric columns
-        if len(analysis['numeric_columns']) > 1:
-            numeric_df = df[analysis['numeric_columns']].select_dtypes(include=['number'])
-            if len(numeric_df.columns) > 1:
-                corr_matrix = numeric_df.corr()
-                # Find strong correlations
-                strong_correlations = []
-                for i in range(len(corr_matrix.columns)):
-                    for j in range(i+1, len(corr_matrix.columns)):
-                        corr_val = corr_matrix.iloc[i, j]
-                        if abs(corr_val) > 0.5:  # Strong correlation threshold
-                            strong_correlations.append({
-                                "col1": corr_matrix.columns[i],
-                                "col2": corr_matrix.columns[j],
-                                "correlation": corr_val
-                            })
-                data_summary["correlations"] = make_json_serializable(strong_correlations)
+        # Try to add time series information if available
+        time_columns = [col for col in df.columns if analysis['data_types'].get(col) in ['datetime64', 'date', 'time']]
+        if time_columns:
+            data_summary["time_columns"] = time_columns
+            # Sample of time series data
+            time_sample = {}
+            for col in time_columns[:2]:  # Limit to first 2 time columns
+                try:
+                    time_sample[col] = sorted(df[col].dropna().unique())[:10]
+                    time_sample[col] = [str(ts) for ts in time_sample[col]]
+                except:
+                    time_sample[col] = "Error parsing time data"
+            data_summary["time_sample"] = time_sample
 
-        # Add time-based analysis if date columns exist
-        date_columns = df.select_dtypes(include=['datetime64', 'object']).columns
-        for col in date_columns:
-            try:
-                df_temp = pd.to_datetime(df[col], errors='coerce')
-                if not df_temp.isna().all():
-                    data_summary["trends"][col] = {
-                        "is_date": True,
-                        "date_range": {
-                            "start": df_temp.min().isoformat() if pd.notna(df_temp.min()) else None,
-                            "end": df_temp.max().isoformat() if pd.notna(df_temp.max()) else None
-                        }
-                    }
-            except:
-                pass
+        # Create the prompt using the appropriate method
+        prompt = self._create_enhanced_analysis_prompt(data_summary, options)
 
-        prompt = self._create_analysis_prompt(data_summary)
+        # Choose the LLM to use based on configuration
+        if LLM_MODEL == "openai" and self.openai_client:
+            return await self._analyze_with_openai(prompt)
+        else:
+            return await self._analyze_with_gemini(prompt)
 
+    async def _analyze_with_openai(self, prompt: str) -> Dict[str, Any]:
+        """Analyze data using OpenAI's API"""
         try:
-            # Try primary model first (from environment configuration)
-            if LLM_MODEL == "gemini" and os.getenv("GOOGLE_API_KEY"):
-                return await self._analyze_with_gemini(prompt)
-            elif LLM_MODEL == "openai" and self.openai_client:
-                return await self._analyze_with_openai(prompt)
-            # Fallback to available model
-            elif os.getenv("GOOGLE_API_KEY"):
-                return await self._analyze_with_gemini(prompt)
-            elif self.openai_client:
-                return await self._analyze_with_openai(prompt)
-            else:
-                print("No LLM API keys configured, using fallback analysis")
-                return self._generate_fallback_analysis(df, analysis, filename)
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "You are a data visualization expert that creates insightful dashboards."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5,
+                max_tokens=3000
+            )
+
+            result_text = response.choices[0].message.content
+
+            # Extract JSON from the response
+            result_json = self._extract_json_from_text(result_text)
+            return result_json
 
         except Exception as e:
-            print(f"LLM Analysis error: {str(e)}")
-            # Fallback to basic analysis
-            return self._generate_fallback_analysis(df, analysis, filename)
+            print(f"OpenAI Analysis Error: {str(e)}")
+            # Return empty result
+            return {"dashboard_title": "Error", "charts": [], "insights": f"Error: {str(e)}"}
 
-    def _create_analysis_prompt(self, data_summary: dict) -> str:
-        """Create an enhanced analysis prompt for the LLM"""
-        return f"""
+    async def _analyze_with_gemini(self, prompt: str) -> Dict[str, Any]:
+        """Analyze data using Google's Gemini API"""
+        try:
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            response = model.generate_content(prompt)
+            result_text = response.text
+
+            # Extract JSON from the response
+            result_json = self._extract_json_from_text(result_text)
+            return result_json
+
+        except Exception as e:
+            print(f"Gemini Analysis Error: {str(e)}")
+            # Return empty result
+            return {"dashboard_title": "Error", "charts": [], "insights": f"Error: {str(e)}"}
+
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from the text response"""
+        try:
+            # Find the start and end of the JSON object
+            start_idx = text.find('{')
+            end_idx = text.rfind('}') + 1
+
+            if start_idx >= 0 and end_idx > 0:
+                json_str = text[start_idx:end_idx]
+                return json.loads(json_str)
+            else:
+                raise ValueError("No JSON found in response")
+
+        except Exception as e:
+            print(f"JSON extraction error: {str(e)}")
+            print(f"Response text: {text}")
+            # Return empty JSON if extraction fails
+            return {"dashboard_title": "Error", "charts": [], "insights": "Error extracting insights"}
+
+    def _create_enhanced_analysis_prompt(self, data_summary: dict, options: Optional[Dict[str, Any]] = None) -> str:
+        """Create an enhanced analysis prompt for the LLM that incorporates user preferences"""
+
+        # Process user options
+        category = options.get("category") if options else None
+        chart_types = options.get("chart_types", []) if options else []
+        number_of_charts = options.get("number_of_charts", 3) if options else 3
+        description = options.get("description") if options else None
+
+        # Build the prompt with user preferences
+        category_guidance = ""
+        if category:
+            category_guidance = f"""
+            IMPORTANT: This data is related to {category}. Tailor your analysis to this specific domain.
+            Consider metrics, trends, and insights that would be most valuable for {category} data.
+            """
+
+        chart_type_guidance = ""
+        if chart_types:
+            chart_types_str = ", ".join(chart_types)
+            chart_type_guidance = f"""
+            IMPORTANT: Focus on creating the following chart types: {chart_types_str}.
+            Prioritize these chart types in your recommendations.
+            """
+
+        description_guidance = ""
+        if description:
+            description_guidance = f"""
+            ADDITIONAL CONTEXT FROM USER:
+            {description}
+
+            Use this information to guide your analysis and highlight relevant aspects of the data.
+            """
+
+        # Build complete prompt
+        prompt = f"""
         You are an expert data analyst and visualization specialist with deep business intelligence experience.
         Analyze this Excel dataset with creativity and precision to create a comprehensive, insightful dashboard.
 
         Dataset Summary:
         {json.dumps(data_summary, indent=2, cls=CustomJSONEncoder)}
 
+        {category_guidance}
+        {chart_type_guidance}
+        {description_guidance}
+
         ANALYSIS REQUIREMENTS:
-        1. **Be Creative & Comprehensive**: Generate 5-8 diverse, meaningful charts that tell a complete story
-        2. **Chart Variety**: Use different chart types (bar, line, pie, scatter, area, doughnut, radar, heatmap)
+        1. **Be Creative & Comprehensive**: Generate exactly {number_of_charts} diverse, meaningful charts that tell a complete story
+        2. **Chart Variety**: Use appropriate chart types that best visualize the data patterns
         3. **Business Intelligence**: Focus on actionable insights, trends, patterns, and anomalies
         4. **Precision**: Use exact column names, proper aggregations, and meaningful metrics
         5. **Visual Appeal**: Choose appropriate color schemes and ensure charts are visually distinct
         6. **Data-Driven**: Base recommendations on actual data patterns, correlations, and distributions
-
-        CHART SELECTION GUIDELINES:
-        - Use BAR charts for comparing categories (sales by region, top products)
-        - Use PIE charts for showing parts of a whole (market share, budget allocation) - limit to 6 categories max
-        - Use LINE charts for showing trends over time (monthly sales, growth patterns)
-        - AVOID scatter plots and correlation charts - they are too complex for business users
-        - Focus on simple, clear visualizations that tell a story
-        - Prioritize the most business-relevant insights
-        - Limit to 3-4 charts maximum for better readability
+        7. **Interactive Features**: Add suggestions for interactive features that would enhance each chart
+        8. **Rich Metadata**: Include detailed metadata for each visualization
 
         Return your response as a JSON object with this EXACT structure:
         {{
-            "dashboard_title": "Creative, business-focused title that captures the essence of the data",
-            "summary": "Comprehensive 3-4 sentence summary highlighting key findings and business implications",
+            "dashboard_title": "Meaningful title for the dashboard",
+            "summary": "Brief 2-3 sentence summary of what the data represents",
             "key_metrics": [
-                {{"metric": "Total/Average/Key Metric Name", "value": "Calculated Value with Units", "description": "Business significance and context"}},
-                {{"metric": "Growth/Trend Metric", "value": "Percentage or Rate", "description": "What this trend means for business"}},
-                {{"metric": "Efficiency/Performance Metric", "value": "Ratio or Score", "description": "Operational insights"}}
+                {{"metric": "Metric Name", "value": "Value", "description": "What this means"}},
+                {{"metric": "Another Metric", "value": "Value", "description": "What this means"}}
             ],
             "charts": [
                 {{
-                    "chart_type": "pie|bar|line|scatter|area|doughnut",
-                    "title": "Specific, actionable chart title",
-                    "x_axis": "exact_column_name",
-                    "y_axis": "exact_column_name_or_calculated_metric",
-                    "insights": "Detailed analysis of what this chart reveals, including specific numbers and business implications",
-                    "color_scheme": "primary|secondary|success|warning|info|custom",
+                    "chart_type": "bar|line|pie|scatter|area|doughnut|radar|heatmap",
+                    "title": "Descriptive chart title",
+                    "x_axis": "column_name",
+                    "y_axis": "column_name_or_aggregation",
+                    "insights": "What this chart reveals about the data",
+                    "color_scheme": "primary|secondary|success|warning|info",
                     "data_config": {{
-                        "source_columns": ["exact_column_name1", "exact_column_name2"],
-                        "aggregation": "sum|count|avg|max|min|percentage|none",
-                        "limit": 15,
-                        "sort": "desc|asc",
-                        "filter_conditions": {{}},
-                        "show_percentages": true,
-                        "group_by": "optional_grouping_column"
-                    }}
-                }},
-                // Generate 5-8 diverse charts
+                        "source_columns": ["col1", "col2"],
+                        "aggregation": "sum|count|avg|none",
+                        "limit": 10,
+                        "sort": "asc|desc"
+                    }},
+                    "metadata": {{
+                        "importance": "high|medium|low",
+                        "relevant_business_kpis": ["kpi1", "kpi2"],
+                        "recommended_actions": ["action1", "action2"]
+                    }},
+                    "interactive_features": ["filter", "drill_down", "tooltip", "animation"]
+                }}
             ],
-            "insights": "Comprehensive business intelligence summary (4-6 sentences) covering key patterns, trends, correlations, outliers, and strategic recommendations based on the data analysis"
+            "insights": "Detailed insights about the data patterns, trends, and business implications (3-4 sentences)",
+            "metadata": {{
+                "data_quality_score": "high|medium|low",
+                "analysis_confidence": "high|medium|low",
+                "recommended_refresh_frequency": "daily|weekly|monthly",
+                "key_factors": ["factor1", "factor2"],
+                "potential_use_cases": ["use_case1", "use_case2"]
+            }}
         }}
 
-        CRITICAL REQUIREMENTS:
-        - Only use column names that exist in the dataset
-        - For pie charts, ensure data adds up to meaningful percentages
-        - Include specific numbers and percentages in insights
-        - Make titles business-friendly and actionable
-        - Ensure each chart provides unique value and perspective
-        - Focus on the most impactful and interesting patterns in the data
-        - Consider seasonal trends, outliers, and correlations
-        - Provide strategic recommendations based on findings
+        Your response MUST be valid JSON. Do not include any text before or after the JSON object.
         """
 
-    async def _analyze_with_openai(self, prompt: str) -> Dict[str, Any]:
-        """Analyze data using OpenAI GPT"""
-        if not self.openai_client:
-            raise Exception("OpenAI client not configured")
-
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a data visualization expert who creates insightful, business-focused dashboards. Always respond with valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-
-        response_text = response.choices[0].message.content.strip()
-
-        # Clean up the response to ensure it's valid JSON
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-
-        parsed_response = json.loads(response_text)
-        return make_json_serializable(parsed_response)
-
-    async def _analyze_with_gemini(self, prompt: str) -> Dict[str, Any]:
-        """Analyze data using Google Gemini"""
-        if not os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") == "your-google-api-key-here":
-            raise Exception("Google API key not configured")
-
-        # Initialize Gemini model
-        model = genai.GenerativeModel('gemini-2.0-flash')
-
-        # Create system prompt for Gemini
-        full_prompt = f"""
-        You are a data visualization expert who creates insightful, business-focused dashboards.
-        You must respond ONLY with valid JSON, no other text or formatting.
-
-        {prompt}
-        """
-
-        response = model.generate_content(
-            full_prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=2000,
-            )
-        )
-
-        response_text = response.text.strip()
-
-        # Clean up the response to ensure it's valid JSON
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-
-        parsed_response = json.loads(response_text)
-        return make_json_serializable(parsed_response)
-
-    def _generate_fallback_analysis(self, df: pd.DataFrame, analysis: dict, filename: str) -> Dict[str, Any]:
-        """Fallback analysis when LLM is not available"""
-        return make_json_serializable({
-            "dashboard_title": f"Analysis of {filename}",
-            "summary": f"Dataset contains {len(df)} rows and {len(df.columns)} columns with various data types.",
-            "key_metrics": [
-                {"metric": "Total Rows", "value": str(len(df)), "description": "Number of records in the dataset"},
-                {"metric": "Columns", "value": str(len(df.columns)), "description": "Number of data fields"}
-            ],
-            "charts": [
-                {
-                    "chart_type": "bar",
-                    "title": f"Distribution of {analysis['categorical_columns'][0]}" if analysis['categorical_columns'] else "Data Overview",
-                    "x_axis": analysis['categorical_columns'][0] if analysis['categorical_columns'] else "Categories",
-                    "y_axis": "Count",
-                    "insights": "Basic distribution of categorical data",
-                    "color_scheme": "primary",
-                    "data_config": {
-                        "source_columns": [analysis['categorical_columns'][0]] if analysis['categorical_columns'] else [],
-                        "aggregation": "count",
-                        "limit": 10,
-                        "sort": "desc"
-                    }
-                }
-            ],
-            "insights": "This dataset provides various data points that can be analyzed for business insights. Further analysis could reveal patterns and trends."
-        })
+        return prompt
