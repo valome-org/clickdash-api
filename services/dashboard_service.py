@@ -202,11 +202,11 @@ class DashboardService:
             }]
         })
 
-    async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str) -> DashboardConfig:
+    async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str, options=None) -> DashboardConfig:
         """Generate complete dashboard using LLM analysis"""
         try:
-            # Get LLM analysis
-            llm_analysis = await self.llm_service.analyze_data_with_llm(df, analysis, filename)
+            # Get LLM analysis with user options
+            llm_analysis = await self.llm_service.analyze_data_with_llm(df, analysis, filename, options)
 
             # Generate charts based on LLM recommendations
             charts = []
@@ -220,7 +220,10 @@ class DashboardService:
                     y_axis=chart_spec.get("y_axis", "Y"),
                     data=chart_data,
                     insights=chart_spec.get("insights", ""),
-                    color_scheme=chart_spec.get("color_scheme", "primary")
+                    color_scheme=chart_spec.get("color_scheme", "primary"),
+                    # Add more metadata for interactivity
+                    metadata=chart_spec.get("metadata", {}),
+                    interactive_features=chart_spec.get("interactive_features", [])
                 )
                 charts.append(chart)
 
@@ -229,7 +232,9 @@ class DashboardService:
                 charts=charts,
                 insights=llm_analysis.get("insights", ""),
                 summary=llm_analysis.get("summary", ""),
-                key_metrics=make_json_serializable(llm_analysis.get("key_metrics", []))
+                key_metrics=make_json_serializable(llm_analysis.get("key_metrics", [])),
+                category=options.get("category") if options else None,
+                metadata=llm_analysis.get("metadata", {})
             )
 
             return dashboard_config
@@ -237,9 +242,9 @@ class DashboardService:
         except Exception as e:
             print(f"LLM Dashboard generation error: {str(e)}")
             # Fallback to basic dashboard
-            return self.generate_basic_dashboard(df, analysis, filename)
+            return self.generate_basic_dashboard(df, analysis, filename, options)
 
-    def generate_basic_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str) -> DashboardConfig:
+    def generate_basic_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str, options=None) -> DashboardConfig:
         """Fallback dashboard generation"""
         charts = []
 
@@ -266,13 +271,22 @@ class DashboardService:
                 insights=f"Shows the distribution of {cat_col} values in the dataset"
             ))
 
+        # Use user-specified options if available
+        category = options.get("category") if options else None
+        description = options.get("description") if options else None
+
+        summary_text = f"Analysis of {filename} containing {len(df)} rows and {len(df.columns)} columns"
+        if description:
+            summary_text += f". {description}"
+
         return DashboardConfig(
-            title=f"Basic Dashboard - {filename}",
+            title=f"{category.capitalize() if category else 'Basic'} Dashboard - {filename}",
             charts=charts,
             insights="Basic dashboard with fundamental data visualizations",
-            summary=f"Analysis of {filename} containing {len(df)} rows and {len(df.columns)} columns",
+            summary=summary_text,
             key_metrics=make_json_serializable([
                 {"metric": "Total Records", "value": str(len(df)), "description": "Number of data rows"},
                 {"metric": "Data Fields", "value": str(len(df.columns)), "description": "Number of columns"}
-            ])
+            ]),
+            category=category
         )
