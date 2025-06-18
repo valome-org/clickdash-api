@@ -1,5 +1,6 @@
 import pandas as pd
-from models.dashboard import ChartConfig, DashboardConfig
+from typing import Dict, List, Any, Optional
+from models.dashboard import ChartConfig, DashboardConfig, KeyMetric
 from utils.serialization import make_json_serializable
 
 from .llm_service import LLMService
@@ -11,7 +12,7 @@ class DashboardService:
     def __init__(self):
         self.llm_service = LLMService()
 
-    def generate_chart_data(self, df: pd.DataFrame, chart_config: dict) -> dict:
+    def generate_chart_data(self, df: pd.DataFrame, chart_config: Dict[str, Any]) -> Dict[str, Any]:
         """Generate actual chart data based on LLM recommendations"""
         try:
             chart_type = chart_config.get("chart_type", "bar")
@@ -21,7 +22,6 @@ class DashboardService:
             limit = data_config.get("limit", 15)
             sort_order = data_config.get("sort", "desc")
             show_percentages = data_config.get("show_percentages", False)
-            group_by = data_config.get("group_by", None)
 
             if not source_columns or not all(col in df.columns for col in source_columns):
                 # Fallback to first available columns
@@ -65,12 +65,13 @@ class DashboardService:
                 }]
             }
 
-    def _generate_bar_pie_chart_data(self, df: pd.DataFrame, source_columns: list, aggregation: str,
-                                   limit: int, sort_order: str, chart_config: dict, show_percentages: bool = False) -> dict:
+    def _generate_bar_pie_chart_data(self, df: pd.DataFrame, source_columns: List[str], aggregation: str,
+                                   limit: int, sort_order: str, chart_config: Dict[str, Any], show_percentages: bool = False) -> Dict[str, Any]:
         """Generate data for bar, pie, and doughnut charts with enhanced percentage support"""
         chart_type = chart_config.get("chart_type", "bar")
 
         # Categorical data aggregation
+        result: Any = None
         if aggregation == "count":
             result = df[source_columns[0]].value_counts().head(limit)
         elif aggregation == "percentage":
@@ -89,11 +90,17 @@ class DashboardService:
         labels = make_json_serializable(result.index.tolist())
         values = make_json_serializable(result.values.tolist())
 
+        # Ensure labels and values are lists
+        if not isinstance(labels, list):
+            labels = [labels] if labels is not None else ["No Data"]
+        if not isinstance(values, list):
+            values = [values] if values is not None else [0]
+
         # For pie charts, calculate percentages
         if chart_type in ["pie", "doughnut"] or show_percentages:
-            total = sum(values)
+            total = sum(v for v in values if isinstance(v, (int, float)))
             if total > 0:
-                percentages = [(v/total)*100 for v in values]
+                percentages = [(v/total)*100 for v in values if isinstance(v, (int, float))]
                 # Add percentage labels
                 labels_with_percentages = [f"{label} ({perc:.1f}%)" for label, perc in zip(labels, percentages)]
             else:
@@ -152,9 +159,9 @@ class DashboardService:
         if chart_type in ["pie", "doughnut"]:
             chart_data["datasets"][0]["percentages"] = percentages
 
-        return make_json_serializable(chart_data)
+        return chart_data
 
-    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int, chart_config: dict) -> dict:
+    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: List[str], limit: int, chart_config: Dict[str, Any]) -> Dict[str, Any]:
         """Generate data for line charts with enhanced time series support"""
         column = source_columns[0]
 
@@ -174,7 +181,7 @@ class DashboardService:
                     # Group by date and aggregate
                     df_grouped = df_temp.groupby(df_temp[date_col].dt.date)[value_col].sum().head(limit)
 
-                    return make_json_serializable({
+                    return {
                         "labels": [str(date) for date in df_grouped.index],
                         "datasets": [{
                             "label": f"{value_col} over time",
@@ -184,13 +191,13 @@ class DashboardService:
                             "tension": 0.4,
                             "fill": False
                         }]
-                    })
+                    }
             except:
                 pass
 
         # Fallback to simple line chart
         data = df[column].dropna().head(limit)
-        return make_json_serializable({
+        return {
             "labels": [str(i+1) for i in range(len(data))],
             "datasets": [{
                 "label": column,
@@ -200,39 +207,78 @@ class DashboardService:
                 "tension": 0.4,
                 "fill": False
             }]
-        })
+        }
 
-    async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str, options=None) -> DashboardConfig:
+    def _ensure_valid_axis_name(self, axis_value: Any, default: str) -> str:
+        """Ensure axis name is a valid string"""
+        if axis_value is None or axis_value == "":
+            return default
+        return str(axis_value)
+
+    def _create_safe_chart_config(self, chart_spec: Dict[str, Any], chart_data: Dict[str, Any], df: pd.DataFrame) -> ChartConfig:
+        """Create a ChartConfig with safe defaults to prevent validation errors"""
+        chart_type = chart_spec.get("chart_type", "bar")
+
+        # Ensure x_axis and y_axis are never None
+        x_axis = self._ensure_valid_axis_name(chart_spec.get("x_axis"), "Category")
+        y_axis = self._ensure_valid_axis_name(chart_spec.get("y_axis"), "Value")
+
+        # If we can infer better axis names from the data config
+        data_config = chart_spec.get("data_config", {})
+        source_columns = data_config.get("source_columns", [])
+
+        if source_columns:
+            if len(source_columns) >= 1 and x_axis == "Category":
+                x_axis = str(source_columns[0])
+            if len(source_columns) >= 2 and y_axis == "Value":
+                y_axis = str(source_columns[1])
+            elif chart_type in ["bar", "pie", "doughnut"] and y_axis == "Value":
+                y_axis = "Count"
+
+        return ChartConfig(
+            chart_type=chart_type,
+            title=chart_spec.get("title", "Chart"),
+            x_axis=x_axis,
+            y_axis=y_axis,
+            data=chart_data,
+            insights=chart_spec.get("insights", ""),
+            color_scheme=chart_spec.get("color_scheme", "primary"),
+            metadata=chart_spec.get("metadata", {}),
+            interactive_features=chart_spec.get("interactive_features", [])
+        )
+
+    async def generate_llm_dashboard(self, df: pd.DataFrame, analysis: Dict[str, Any], filename: str, options: Optional[Dict[str, Any]] = None) -> DashboardConfig:
         """Generate complete dashboard using LLM analysis"""
         try:
             # Get LLM analysis with user options
             llm_analysis = await self.llm_service.analyze_data_with_llm(df, analysis, filename, options)
 
             # Generate charts based on LLM recommendations
-            charts = []
+            charts: List[ChartConfig] = []
             for chart_spec in llm_analysis.get("charts", []):
                 chart_data = self.generate_chart_data(df, chart_spec)
-
-                chart = ChartConfig(
-                    chart_type=chart_spec.get("chart_type", "bar"),
-                    title=chart_spec.get("title", "Chart"),
-                    x_axis=chart_spec.get("x_axis", "X"),
-                    y_axis=chart_spec.get("y_axis", "Y"),
-                    data=chart_data,
-                    insights=chart_spec.get("insights", ""),
-                    color_scheme=chart_spec.get("color_scheme", "primary"),
-                    # Add more metadata for interactivity
-                    metadata=chart_spec.get("metadata", {}),
-                    interactive_features=chart_spec.get("interactive_features", [])
-                )
+                chart = self._create_safe_chart_config(chart_spec, chart_data, df)
                 charts.append(chart)
+
+            # Process key metrics safely
+            key_metrics_raw = llm_analysis.get("key_metrics", [])
+            key_metrics: List[KeyMetric] = []
+
+            if isinstance(key_metrics_raw, list):
+                for metric_data in key_metrics_raw:
+                    if isinstance(metric_data, dict):
+                        key_metrics.append(KeyMetric(
+                            metric=str(metric_data.get("metric", "Unknown")),
+                            value=str(metric_data.get("value", "N/A")),
+                            description=metric_data.get("description")
+                        ))
 
             dashboard_config = DashboardConfig(
                 title=llm_analysis.get("dashboard_title", f"Dashboard - {filename}"),
                 charts=charts,
                 insights=llm_analysis.get("insights", ""),
                 summary=llm_analysis.get("summary", ""),
-                key_metrics=make_json_serializable(llm_analysis.get("key_metrics", [])),
+                key_metrics=key_metrics,
                 category=options.get("category") if options else None,
                 metadata=llm_analysis.get("metadata", {})
             )
@@ -244,28 +290,28 @@ class DashboardService:
             # Fallback to basic dashboard
             return self.generate_basic_dashboard(df, analysis, filename, options)
 
-    def generate_basic_dashboard(self, df: pd.DataFrame, analysis: dict, filename: str, options=None) -> DashboardConfig:
+    def generate_basic_dashboard(self, df: pd.DataFrame, analysis: Dict[str, Any], filename: str, options: Optional[Dict[str, Any]] = None) -> DashboardConfig:
         """Fallback dashboard generation"""
-        charts = []
+        charts: List[ChartConfig] = []
 
         # Basic bar chart for categorical data
-        if analysis['categorical_columns']:
+        if analysis.get('categorical_columns'):
             cat_col = analysis['categorical_columns'][0]
             value_counts = df[cat_col].value_counts().head(10)
 
-            chart_data = make_json_serializable({
+            chart_data = {
                 "labels": value_counts.index.tolist(),
                 "datasets": [{
                     "label": "Count",
                     "data": value_counts.values.tolist(),
                     "backgroundColor": "rgba(59, 130, 246, 0.5)"
                 }]
-            })
+            }
 
             charts.append(ChartConfig(
                 chart_type="bar",
                 title=f"Distribution of {cat_col}",
-                x_axis=cat_col,
+                x_axis=str(cat_col),
                 y_axis="Count",
                 data=chart_data,
                 insights=f"Shows the distribution of {cat_col} values in the dataset"
@@ -279,14 +325,17 @@ class DashboardService:
         if description:
             summary_text += f". {description}"
 
+        # Create key metrics
+        key_metrics = [
+            KeyMetric(metric="Total Records", value=str(len(df)), description="Number of data rows"),
+            KeyMetric(metric="Data Fields", value=str(len(df.columns)), description="Number of columns")
+        ]
+
         return DashboardConfig(
             title=f"{category.capitalize() if category else 'Basic'} Dashboard - {filename}",
             charts=charts,
             insights="Basic dashboard with fundamental data visualizations",
             summary=summary_text,
-            key_metrics=make_json_serializable([
-                {"metric": "Total Records", "value": str(len(df)), "description": "Number of data rows"},
-                {"metric": "Data Fields", "value": str(len(df.columns)), "description": "Number of columns"}
-            ]),
+            key_metrics=key_metrics,
             category=category
         )

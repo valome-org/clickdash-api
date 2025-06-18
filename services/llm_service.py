@@ -105,7 +105,7 @@ class LLMService:
     async def _analyze_with_gemini(self, prompt: str) -> Dict[str, Any]:
         """Analyze data using Google's Gemini API"""
         try:
-            model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             result_text = response.text
 

@@ -1,13 +1,13 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
 from fastapi.responses import JSONResponse
 
 
-def make_json_serializable(obj):
+def make_json_serializable(obj: Any) -> Union[None, bool, int, float, str, List[Any], Dict[str, Any]]:
     """Convert pandas/numpy objects to JSON serializable types"""
     if obj is None:
         return None
