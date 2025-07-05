@@ -275,7 +275,7 @@ class CSVAdapter(DataSourceInterface):
             source_id=str(uuid.uuid4()),
             name=self.file_path.name,
             description=f"CSV file: {self.file_path.name}",
-            schema=schema,
+            data_schema=schema,
             row_count=row_count,
             column_count=column_count,
             data_types=data_types,
@@ -340,7 +340,7 @@ class CSVAdapter(DataSourceInterface):
             raise RuntimeError("No data loaded. Call connect() first.")
 
         metadata = await self.get_metadata()
-        return metadata.schema or {}
+        return metadata.data_schema or {}
 
     async def get_sample_data(self, limit: int = 10) -> pd.DataFrame:
         """

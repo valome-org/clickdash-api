@@ -210,7 +210,7 @@ class ExcelAdapter(DataSourceInterface):
             source_id=str(uuid.uuid4()),
             name=self.file_path.name,
             description=f"Excel file: {self.file_path.name}",
-            schema=schema,
+            data_schema=schema,
             row_count=row_count,
             column_count=column_count,
             data_types=data_types,
@@ -257,8 +257,8 @@ class ExcelAdapter(DataSourceInterface):
             raise RuntimeError("No data loaded. Call connect() first.")
 
         metadata = await self.get_metadata()
-        if metadata and metadata.schema:
-            return metadata.schema
+        if metadata and metadata.data_schema:
+            return metadata.data_schema
         else:
             raise RuntimeError("Unable to get schema metadata")
 

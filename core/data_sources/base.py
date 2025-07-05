@@ -53,7 +53,7 @@ class DataSourceMetadata(BaseModel):
     source_id: str
     name: str
     description: Optional[str] = None
-    schema: Optional[Dict[str, Any]] = None
+    data_schema: Optional[Dict[str, Any]] = None
     row_count: Optional[int] = None
     column_count: Optional[int] = None
     data_types: Dict[str, str] = Field(default_factory=dict)
