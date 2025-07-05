@@ -5,7 +5,7 @@ import pandas as pd
 from database.connection import get_db
 from database.models import User
 from dependencies.auth import get_current_active_user
-from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+from fastapi import (APIRouter, Depends, File, Form,
                      HTTPException, UploadFile)
 from models.upload import UploadResponse
 from services.dashboard_service import DashboardService
@@ -24,7 +24,6 @@ async def upload_excel_file(
     chart_types: str = Form(None),
     number_of_charts: str = Form(None),
     description: str = Form(None),
-    background_tasks: BackgroundTasks = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
