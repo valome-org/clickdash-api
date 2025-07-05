@@ -11,9 +11,12 @@ def make_json_serializable(obj):
     """Convert pandas/numpy objects to JSON serializable types"""
     if obj is None:
         return None
-    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+    elif isinstance(obj, np.integer):
         return int(obj)
-    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+    elif isinstance(obj, np.floating):
+        # Handle NaN and infinity values in numpy floats
+        if np.isnan(obj) or np.isinf(obj):
+            return None
         return float(obj)
     elif isinstance(obj, np.ndarray):
         return [make_json_serializable(x) for x in obj.tolist()]
@@ -31,7 +34,12 @@ def make_json_serializable(obj):
         return [make_json_serializable(x) for x in obj]
     elif isinstance(obj, dict):
         return {str(k): make_json_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, (int, float, str, bool)):
+    elif isinstance(obj, (int, str, bool)):
+        return obj
+    elif isinstance(obj, float):
+        # Handle NaN and infinity values in regular floats
+        if np.isnan(obj) or np.isinf(obj):
+            return None
         return obj
     elif pd.isna(obj):  # Handle pandas NaN values
         return None
@@ -48,10 +56,19 @@ class CustomJSONEncoder(json.JSONEncoder):
 class CustomJSONResponse(JSONResponse):
     """Custom JSONResponse that uses our serializer"""
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            make_json_serializable(content),
-            ensure_ascii=False,
-            allow_nan=False,
-            indent=None,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        try:
+            return json.dumps(
+                make_json_serializable(content),
+                ensure_ascii=False,
+                allow_nan=False,  # Explicitly disallow NaN values
+                indent=None,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        except (ValueError, TypeError) as e:
+            # If serialization fails, return error info
+            error_content = {
+                "error": "JSON serialization failed",
+                "details": str(e),
+                "content_type": str(type(content))
+            }
+            return json.dumps(error_content).encode("utf-8")

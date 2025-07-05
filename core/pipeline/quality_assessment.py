@@ -355,6 +355,11 @@ class DataQualityAssessmentStage(PipelineStage):
                     else:
                         severity = QualityIssueSeverity.INFO
 
+                    # Get outlier values and handle NaN values
+                    outlier_values = df.loc[outlier_indices[:10], col].tolist()
+                    # Convert NaN values to None for JSON serialization
+                    outlier_values = [None if pd.isna(val) else val for val in outlier_values]
+
                     issue = QualityIssue(
                         issue_type=QualityIssueType.OUTLIERS,
                         severity=severity,
@@ -367,7 +372,7 @@ class DataQualityAssessmentStage(PipelineStage):
                         metadata={
                             'outlier_method': self.outlier_method,
                             'threshold': self.outlier_threshold,
-                            'outlier_values': df.loc[outlier_indices[:10], col].tolist()
+                            'outlier_values': outlier_values
                         }
                     )
 
@@ -462,9 +467,23 @@ class DataQualityAssessmentStage(PipelineStage):
         """
         Detect outliers using IQR method
         """
-        Q1 = series.quantile(0.25)
-        Q3 = series.quantile(0.75)
+        # Skip if series is empty or all NaN
+        clean_series = series.dropna()
+        if len(clean_series) <= 1:
+            return []
+
+        Q1 = clean_series.quantile(0.25)
+        Q3 = clean_series.quantile(0.75)
+
+        # Check for NaN values in quantiles
+        if pd.isna(Q1) or pd.isna(Q3):
+            return []
+
         IQR = Q3 - Q1
+
+        # If IQR is 0 (all values are the same), no outliers
+        if IQR == 0:
+            return []
 
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
@@ -655,33 +674,48 @@ class DataQualityAssessmentStage(PipelineStage):
 
         try:
             for col in df.columns:
+                # Calculate basic metrics with safe handling
+                null_count = int(df[col].isnull().sum())
+                null_percentage = (null_count / len(df)) * 100 if len(df) > 0 else 0
+                unique_count = int(df[col].nunique())
+                unique_percentage = (unique_count / len(df)) * 100 if len(df) > 0 else 0
+
                 column_metrics = {
                     'data_type': str(df[col].dtype),
-                    'non_null_count': df[col].count(),
-                    'null_count': df[col].isnull().sum(),
-                    'null_percentage': (df[col].isnull().sum() / len(df)) * 100,
-                    'unique_count': df[col].nunique(),
-                    'unique_percentage': (df[col].nunique() / len(df)) * 100
+                    'non_null_count': int(df[col].count()),
+                    'null_count': null_count,
+                    'null_percentage': float(null_percentage),
+                    'unique_count': unique_count,
+                    'unique_percentage': float(unique_percentage)
                 }
 
                 # Add numeric-specific metrics
                 if df[col].dtype in ['int64', 'float64']:
+                    # Calculate metrics with NaN handling
+                    mean_val = df[col].mean()
+                    std_val = df[col].std()
+                    min_val = df[col].min()
+                    max_val = df[col].max()
+                    median_val = df[col].median()
+
                     column_metrics.update({
-                        'mean': df[col].mean(),
-                        'std': df[col].std(),
-                        'min': df[col].min(),
-                        'max': df[col].max(),
-                        'median': df[col].median(),
+                        'mean': None if pd.isna(mean_val) else float(mean_val),
+                        'std': None if pd.isna(std_val) else float(std_val),
+                        'min': None if pd.isna(min_val) else float(min_val),
+                        'max': None if pd.isna(max_val) else float(max_val),
+                        'median': None if pd.isna(median_val) else float(median_val),
                         'outlier_count': len(await self._detect_outliers(df[col]))
                     })
 
                 # Add categorical-specific metrics
                 if df[col].dtype == 'object':
                     value_counts = df[col].value_counts()
+                    avg_length = df[col].astype(str).str.len().mean() if df[col].dtype == 'object' else None
+
                     column_metrics.update({
                         'most_frequent': value_counts.index[0] if len(value_counts) > 0 else None,
-                        'most_frequent_count': value_counts.iloc[0] if len(value_counts) > 0 else 0,
-                        'avg_length': df[col].astype(str).str.len().mean() if df[col].dtype == 'object' else None
+                        'most_frequent_count': int(value_counts.iloc[0]) if len(value_counts) > 0 else 0,
+                        'avg_length': None if pd.isna(avg_length) else float(avg_length)
                     })
 
                 metrics[col] = column_metrics

@@ -4,6 +4,7 @@ Data Normalization Engine - Convert all data to common internal format
 
 import re
 import uuid
+import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, date
 import pandas as pd
@@ -11,6 +12,9 @@ import numpy as np
 from enum import Enum
 from pydantic import BaseModel, Field
 import logging
+
+# Suppress pandas datetime format warnings
+warnings.filterwarnings('ignore', message='Could not infer format', category=UserWarning)
 
 from .base import PipelineStage, PipelineStageType
 from utils.serialization import make_json_serializable
@@ -451,19 +455,39 @@ class DataTypeConverter:
             return True
 
         try:
-            # Try to parse as datetime
-            pd.to_datetime(series.head(100), errors='raise')
-            return True
+            # Sample data for testing
+            sample_data = series.dropna().head(50)
+            if len(sample_data) == 0:
+                return False
+
+            # Try to parse as datetime without format inference warnings
+            parsed = pd.to_datetime(sample_data, errors='coerce')
+
+            # Check if most values were successfully parsed
+            success_rate = parsed.notna().sum() / len(parsed)
+            return success_rate > 0.7  # At least 70% success rate
         except:
             return False
 
     async def _is_date(self, series: pd.Series) -> bool:
         """Check if series represents date values"""
         try:
-            # Try to parse as date
-            parsed = pd.to_datetime(series.head(100), errors='raise')
-            # Check if all times are midnight (indicating date-only)
-            return all(t.time() == parsed.iloc[0].time() for t in parsed)
+            # Sample data for testing
+            sample_data = series.dropna().head(50)
+            if len(sample_data) == 0:
+                return False
+
+            # Try to parse as datetime
+            parsed = pd.to_datetime(sample_data, errors='coerce')
+
+            # Filter out failed conversions
+            valid_parsed = parsed.dropna()
+            if len(valid_parsed) == 0:
+                return False
+
+            # Check if most values have time component at midnight (indicating date-only)
+            midnight_count = sum(1 for t in valid_parsed if t.time() == pd.Timestamp('00:00:00').time())
+            return midnight_count / len(valid_parsed) > 0.8  # 80% are date-only
         except:
             return False
 
