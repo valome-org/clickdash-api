@@ -256,10 +256,10 @@ async def enhanced_upload(
 
             # Convert new analysis format to legacy format for compatibility
             legacy_analysis = {
-                "columns": analysis_results["metadata"]["schema"]["columns"],
+                "columns": analysis_results["metadata"]["data_schema"]["columns"],
                 "rows": analysis_results["metadata"]["row_count"],
-                "numeric_columns": analysis_results["metadata"]["schema"]["numeric_columns"],
-                "categorical_columns": analysis_results["metadata"]["schema"]["categorical_columns"],
+                "numeric_columns": analysis_results["metadata"]["data_schema"]["numeric_columns"],
+                "categorical_columns": analysis_results["metadata"]["data_schema"]["categorical_columns"],
                 "data_types": analysis_results["metadata"]["data_types"],
                 "missing_values": {},  # Would need to be extracted from validation results
                 "summary": {}  # Would need to be calculated
