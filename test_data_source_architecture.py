@@ -110,7 +110,8 @@ async def test_csv_adapter():
 
             # Test streaming
             chunk_count = 0
-            async for chunk in data_source.get_data_stream(chunk_size=2):
+            data_stream = await data_source.get_data_stream(chunk_size=2)
+            async for chunk in data_stream:
                 chunk_count += 1
                 print(f"✅ Stream chunk {chunk_count}: {len(chunk)} rows")
 

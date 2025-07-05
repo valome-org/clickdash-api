@@ -6,7 +6,7 @@ from database import create_tables
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from routers import auth_router, dashboard_router, models_router, upload_router, data_sources
+from routers import auth_router, dashboard_router, models_router, upload_router, data_sources_router, processing_router
 from utils.serialization import CustomJSONResponse
 
 # Initialize database tables
@@ -35,7 +35,8 @@ app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(upload_router, prefix="/api", tags=["upload"])
 app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
 app.include_router(models_router, prefix="/api", tags=["models"])
-app.include_router(data_sources.router, prefix="/api", tags=["data-sources"])
+app.include_router(data_sources_router, prefix="/api", tags=["data-sources"])
+app.include_router(processing_router, prefix="/api", tags=["processing"])
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

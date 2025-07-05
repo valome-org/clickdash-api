@@ -109,6 +109,9 @@ class CSVAdapter(DataSourceInterface):
         Detect the encoding of the CSV file
         """
         try:
+            if not self.file_path:
+                return 'utf-8'
+
             with open(self.file_path, 'rb') as f:
                 raw_data = f.read(10000)  # Read first 10KB
                 result = chardet.detect(raw_data)
@@ -120,7 +123,7 @@ class CSVAdapter(DataSourceInterface):
                     logger.warning(f"Low confidence ({confidence}) for detected encoding {detected_encoding}, using utf-8")
                     return 'utf-8'
 
-                return detected_encoding
+                return detected_encoding or 'utf-8'
 
         except Exception as e:
             logger.warning(f"Encoding detection failed: {str(e)}, using utf-8")
@@ -131,6 +134,9 @@ class CSVAdapter(DataSourceInterface):
         Detect the delimiter of the CSV file
         """
         try:
+            if not self.file_path:
+                return ','
+
             with open(self.file_path, 'r', encoding=self.encoding) as f:
                 # Read first few lines
                 sample = f.read(1024)
@@ -143,7 +149,7 @@ class CSVAdapter(DataSourceInterface):
                 delimiter_counts[delim] = sample.count(delim)
 
             # Return delimiter with highest count
-            best_delimiter = max(delimiter_counts, key=delimiter_counts.get)
+            best_delimiter = max(delimiter_counts, key=lambda x: delimiter_counts[x])
 
             if delimiter_counts[best_delimiter] == 0:
                 logger.warning("No common delimiters found, using comma")
@@ -260,6 +266,9 @@ class CSVAdapter(DataSourceInterface):
         }
 
         # File information
+        if not self.file_path:
+            raise RuntimeError("File path not available")
+
         file_stats = self.file_path.stat()
 
         return DataSourceMetadata(
@@ -331,7 +340,7 @@ class CSVAdapter(DataSourceInterface):
             raise RuntimeError("No data loaded. Call connect() first.")
 
         metadata = await self.get_metadata()
-        return metadata.schema
+        return metadata.schema or {}
 
     async def get_sample_data(self, limit: int = 10) -> pd.DataFrame:
         """
