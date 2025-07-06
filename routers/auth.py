@@ -5,7 +5,11 @@ from config.settings import ACCESS_TOKEN_EXPIRE_MINUTES
 from database.connection import get_db
 from database.models import User
 from dependencies.auth import get_current_active_user, get_current_admin_user
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from fastapi.responses import RedirectResponse, JSONResponse
+from google_auth_oauthlib.flow import Flow
+import os
+from dotenv import load_dotenv
 from models.auth import (PasswordChange, Token, UserCreate, UserLogin,
                          UserResponse)
 from services.auth_service import AuthService
@@ -14,6 +18,14 @@ from utils.serialization import CustomJSONResponse
 
 router = APIRouter()
 auth_service = AuthService()
+
+# Google OAuth2 configuration
+load_dotenv()
+CLIENT_SECRETS_FILE = os.getenv("GOOGLE_CLIENT_SECRETS_FILE", "client_secret.json")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Remove in production
 
 
 @router.post("/register", response_model=UserResponse)
@@ -157,3 +169,48 @@ async def toggle_user_active_status(
         "user_id": user.user_id,
         "is_active": user.is_active
     })
+
+
+@router.get("/google")
+async def google_auth(request: Request):
+    """Start Google OAuth2 flow (stateless)"""
+    try:
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRETS_FILE,
+            scopes=SCOPES,
+            redirect_uri=str(request.url_for("google_oauth2callback")),
+        )
+        auth_url, state = flow.authorization_url(
+        access_type="offline", include_granted_scopes="true"
+        )
+        return RedirectResponse(auth_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OAuth2 flow error: {str(e)}")
+
+
+@router.get("/google/callback", name="google_oauth2callback")
+async def google_oauth2callback(request: Request, state: str = None):
+    """Handle Google OAuth2 callback (stateless) and redirect to frontend with credentials as URL param."""
+    import json
+    import urllib.parse
+    try:
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRETS_FILE,
+            scopes=SCOPES,
+            state=state,
+            redirect_uri=str(request.url_for("google_oauth2callback")),
+        )
+        flow.fetch_token(authorization_response=str(request.url))
+        credentials = flow.credentials
+        cred_dict = {
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes,
+        }
+        cred_str = urllib.parse.quote(json.dumps(cred_dict))
+        frontend_url = f"http://localhost:3000/upload?credentials={cred_str}"
+        return RedirectResponse(frontend_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OAuth2 callback error: {str(e)}")
