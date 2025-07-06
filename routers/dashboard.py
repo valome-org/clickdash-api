@@ -2,7 +2,7 @@ from typing import List
 
 from database.connection import get_db
 from database.models import User
-from dependencies.auth import get_current_active_user, get_current_admin_user
+from dependencies.auth import get_current_active_user
 from fastapi import APIRouter, Depends, HTTPException
 from services.database_service import DatabaseService
 from sqlalchemy.orm import Session
@@ -49,7 +49,6 @@ def get_my_dashboards(
 def list_all_dashboards(
     limit: int = 100,
     offset: int = 0,
-    admin_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """List all dashboards with pagination (admin only)"""

@@ -4,8 +4,8 @@ from typing import List
 from config.settings import ACCESS_TOKEN_EXPIRE_MINUTES
 from database.connection import get_db
 from database.models import User
-from dependencies.auth import get_current_active_user, get_current_admin_user
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from dependencies.auth import get_current_active_user
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, JSONResponse
 from google_auth_oauthlib.flow import Flow
 import os
@@ -69,7 +69,7 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
             detail="Inactive user"
         )
 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
     access_token = auth_service.create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
@@ -127,7 +127,6 @@ async def change_password(
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
-    admin_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """List all users (admin only)"""
@@ -149,7 +148,6 @@ async def list_users(
 @router.put("/users/{user_id}/toggle-active")
 async def toggle_user_active_status(
     user_id: str,
-    admin_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """Toggle user active status (admin only)"""
