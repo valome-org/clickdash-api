@@ -20,6 +20,17 @@ from .pipeline.quality_assessment import (
     QualityIssueType,
     QualityIssueSeverity
 )
+from .metadata import (
+    MetadataExtractor,
+    MetadataEnhancementService,
+    MetadataValidator,
+    DatasetMetadata,
+    ColumnMetadata,
+    UserEnhancedMetadata,
+    MetadataType,
+    MetadataStatus,
+    MetadataContext
+)
 
 __all__ = [
     # Data Sources
@@ -49,5 +60,16 @@ __all__ = [
     'DataQualityReport',
     'QualityIssue',
     'QualityIssueType',
-    'QualityIssueSeverity'
+    'QualityIssueSeverity',
+
+    # Metadata Management
+    'MetadataExtractor',
+    'MetadataEnhancementService',
+    'MetadataValidator',
+    'DatasetMetadata',
+    'ColumnMetadata',
+    'UserEnhancedMetadata',
+    'MetadataType',
+    'MetadataStatus',
+    'MetadataContext'
 ]

@@ -21,15 +21,8 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user"""
     try:
         user = auth_service.create_user(db, user_data)
-        return UserResponse(
-            user_id=user.user_id,
-            email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            is_active=user.is_active,
-            is_admin=user.is_admin,
-            created_at=user.created_at.isoformat()
-        )
+        user_dict = user.to_dict()
+        return UserResponse(**user_dict)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -51,7 +44,7 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not getattr(user, 'is_active', True):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
@@ -59,18 +52,11 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
 
     access_token_expires = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
     access_token = auth_service.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": getattr(user, 'username', '')}, expires_delta=access_token_expires
     )
 
-    user_response = UserResponse(
-        user_id=user.user_id,
-        email=user.email,
-        username=user.username,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_admin=user.is_admin,
-        created_at=user.created_at.isoformat()
-    )
+    user_dict = user.to_dict()
+    user_response = UserResponse(**user_dict)
 
     return Token(
         access_token=access_token,
@@ -82,15 +68,8 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """Get current user information"""
-    return UserResponse(
-        user_id=current_user.user_id,
-        email=current_user.email,
-        username=current_user.username,
-        full_name=current_user.full_name,
-        is_active=current_user.is_active,
-        is_admin=current_user.is_admin,
-        created_at=current_user.created_at.isoformat()
-    )
+    user_dict = current_user.to_dict()
+    return UserResponse(**user_dict)
 
 
 @router.post("/change-password")
@@ -119,18 +98,7 @@ async def list_users(
 ):
     """List all users (admin only)"""
     users = db.query(User).all()
-    return [
-        UserResponse(
-            user_id=user.user_id,
-            email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            is_active=user.is_active,
-            is_admin=user.is_admin,
-            created_at=user.created_at.isoformat()
-        )
-        for user in users
-    ]
+    return [UserResponse(**user.to_dict()) for user in users]
 
 
 @router.put("/users/{user_id}/toggle-active")
@@ -147,11 +115,13 @@ async def toggle_user_active_status(
             detail="User not found"
         )
 
-    user.is_active = not user.is_active
+    current_status = getattr(user, 'is_active', True)
+    user.is_active = not current_status  # type: ignore
     db.commit()
 
+    new_status = getattr(user, 'is_active', True)
     return CustomJSONResponse(content={
-        "message": f"User {'activated' if user.is_active else 'deactivated'} successfully",
-        "user_id": user.user_id,
-        "is_active": user.is_active
+        "message": f"User {'activated' if new_status else 'deactivated'} successfully",
+        "user_id": getattr(user, 'user_id', ''),
+        "is_active": new_status
     })

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from routers import auth_router, dashboard_router, models_router, upload_router, data_sources_router, processing_router
 from routers.validation import router as validation_router
 from routers.cleanup import router as cleanup_router
+from routers.metadata import router as metadata_router
 from utils.serialization import CustomJSONResponse
 
 # Initialize database tables
@@ -41,6 +42,7 @@ app.include_router(data_sources_router, prefix="/api", tags=["data-sources"])
 app.include_router(processing_router, prefix="/api", tags=["processing"])
 app.include_router(validation_router)
 app.include_router(cleanup_router)
+app.include_router(metadata_router)
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

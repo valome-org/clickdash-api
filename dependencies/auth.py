@@ -33,7 +33,7 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    if not user.is_active:
+    if not getattr(user, 'is_active', True):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
@@ -44,14 +44,14 @@ async def get_current_user(
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Get the current active user"""
-    if not current_user.is_active:
+    if not getattr(current_user, 'is_active', True):
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
 
 async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Get the current admin user"""
-    if not current_user.is_admin:
+    if not getattr(current_user, 'is_admin', False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
