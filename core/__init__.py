@@ -31,6 +31,19 @@ from .metadata import (
     MetadataStatus,
     MetadataContext
 )
+from .ai import (
+    AIAnalysisService,
+    MultiLLMAnalyzer,
+    ContextAwarePromptBuilder,
+    RecommendationValidator,
+    RecommendationRequest,
+    RecommendationResponse,
+    AnalysisResult,
+    AnalysisContext,
+    RecommendationType,
+    LLMProvider,
+    ConfidenceLevel
+)
 
 __all__ = [
     # Data Sources
@@ -71,5 +84,18 @@ __all__ = [
     'UserEnhancedMetadata',
     'MetadataType',
     'MetadataStatus',
-    'MetadataContext'
+    'MetadataContext',
+
+    # AI Analysis & Recommendations
+    'AIAnalysisService',
+    'MultiLLMAnalyzer',
+    'ContextAwarePromptBuilder',
+    'RecommendationValidator',
+    'RecommendationRequest',
+    'RecommendationResponse',
+    'AnalysisResult',
+    'AnalysisContext',
+    'RecommendationType',
+    'LLMProvider',
+    'ConfidenceLevel'
 ]
