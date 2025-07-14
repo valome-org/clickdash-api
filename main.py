@@ -11,6 +11,7 @@ from routers.validation import router as validation_router
 from routers.cleanup import router as cleanup_router
 from routers.metadata import router as metadata_router
 from routers.workflow import router as workflow_router
+from routers.dashboard_generation import router as dashboard_generation_router
 from utils.serialization import CustomJSONResponse
 
 # Initialize database tables
@@ -45,6 +46,7 @@ app.include_router(validation_router)
 app.include_router(cleanup_router)
 app.include_router(metadata_router)
 app.include_router(workflow_router, prefix="/api", tags=["workflow"])
+app.include_router(dashboard_generation_router, prefix="/api", tags=["dashboard-generation"])
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
