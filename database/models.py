@@ -27,6 +27,13 @@ class User(Base):
     # Relationship to dashboards
     dashboards = relationship("Dashboard", back_populates="user")
 
+    # Workflow system relationships (added for 8-phase system)
+    workflows = relationship("Workflow", foreign_keys="Workflow.user_id")
+    approvals_made = relationship("Approval", foreign_keys="Approval.approver_id")
+    dashboard_versions_created = relationship("DashboardVersion", foreign_keys="DashboardVersion.created_by")
+    export_jobs = relationship("ExportJob", foreign_keys="ExportJob.user_id")
+    notifications = relationship("Notification", foreign_keys="Notification.user_id")
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format"""
         created_at = getattr(self, 'created_at', None)

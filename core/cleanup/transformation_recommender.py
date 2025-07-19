@@ -140,7 +140,7 @@ class TransformationRecommender(CleanupInterface):
             if not isinstance(data, pd.DataFrame):
                 raise ValueError("Input must be a pandas DataFrame")
 
-            if hasattr(data, 'empty') and data.empty:
+            if len(data) == 0:
                 logger.warning("Input DataFrame is empty")
                 return TransformationResult(
                     is_successful=True,

@@ -11,13 +11,16 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 from database.models import User
+from database.connection import get_db
 from dependencies.auth import get_current_active_user
 from services.workflow_service import workflow_service
 from models.dashboard import DashboardConfig
 from utils.serialization import CustomJSONResponse
 import logging
+from services.workflow_db_service import workflow_db_service
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +90,8 @@ class FeedbackRequest(BaseModel):
 @router.post("/workflow/start", response_model=WorkflowResponse)
 async def start_workflow(
     request: StartWorkflowRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     """Start a new dashboard approval workflow."""
     try:
@@ -98,7 +102,8 @@ async def start_workflow(
             data=request.data,
             user=current_user,
             ai_analysis=request.ai_analysis,
-            alternatives=request.alternatives
+            alternatives=request.alternatives,
+            db=db
         )
 
         return WorkflowResponse(
@@ -119,11 +124,12 @@ async def start_workflow(
 @router.get("/workflow/{workflow_id}/status")
 async def get_workflow_status(
     workflow_id: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     """Get current workflow status."""
     try:
-        status_info = await workflow_service.get_workflow_status(workflow_id)
+        status_info = await workflow_service.get_workflow_status(workflow_id, db)
 
         if "error" in status_info:
             raise HTTPException(
@@ -152,11 +158,15 @@ async def get_workflow_status(
 
 @router.get("/workflows/my")
 async def get_my_workflows(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     """Get all workflows for the current user."""
     try:
-        workflows = await workflow_service.get_user_workflows(getattr(current_user, 'user_id', ''))
+        # Try database first, fallback to service method
+        workflows = await workflow_service.get_user_workflows_from_db(getattr(current_user, 'user_id', ''), db)
+        if not workflows:
+            workflows = await workflow_service.get_user_workflows(getattr(current_user, 'user_id', ''))
 
         return CustomJSONResponse(content={
             "workflows": workflows,
@@ -486,4 +496,43 @@ async def workflow_health_check():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Workflow service unhealthy: {str(e)}"
+        )
+
+# Test endpoint for database verification
+@router.get("/workflow/{workflow_id}/database-summary")
+async def get_workflow_database_summary(
+    workflow_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get comprehensive workflow database summary to verify persistence."""
+    try:
+        summary = await workflow_db_service.get_workflow_summary(workflow_id, db)
+
+        if not summary:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow not found in database"
+            )
+
+        return CustomJSONResponse(content={
+            "workflow_id": workflow_id,
+            "database_summary": summary,
+            "verification": {
+                "workflow_persisted": True,
+                "total_related_records": sum(summary["total_records"].values()),
+                "phases_with_data": [
+                    phase for phase, count in summary["total_records"].items()
+                    if count > 0
+                ]
+            }
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get workflow database summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get workflow database summary: {str(e)}"
         )

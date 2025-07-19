@@ -94,7 +94,7 @@ class DuplicateResolver(CleanupInterface):
             if not isinstance(data, pd.DataFrame):
                 raise ValueError("Input must be a pandas DataFrame")
 
-            if hasattr(data, 'empty') and data.empty:
+            if len(data) == 0:
                 logger.warning("Input DataFrame is empty")
                 return DuplicateResult(
                     is_successful=True,
@@ -250,7 +250,7 @@ class DuplicateResolver(CleanupInterface):
         duplicate_mask = data.duplicated(subset=subset_cols, keep=False)
         duplicate_data = data[duplicate_mask]
 
-        if hasattr(duplicate_data, 'empty') and duplicate_data.empty:
+        if len(duplicate_data) == 0:
             return []
 
         # Group duplicates by their values
@@ -312,7 +312,7 @@ class DuplicateResolver(CleanupInterface):
         duplicate_mask = data.duplicated(subset=key_columns, keep=False)
         duplicate_data = data[duplicate_mask]
 
-        if hasattr(duplicate_data, 'empty') and duplicate_data.empty:
+        if len(duplicate_data) == 0:
             return []
 
         # Group duplicates by key column values
