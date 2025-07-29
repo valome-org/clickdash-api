@@ -85,7 +85,19 @@ class OutlierHandler(CleanupInterface):
         start_time = datetime.utcnow()
 
         # Validate input
-        if not self.validate_input(data):
+        try:
+            if not self.validate_input(data):
+                logger.warning("Input validation failed for outlier handler")
+                return OutlierResult(
+                    is_successful=False,
+                    cleanup_strategy_used=context.cleanup_strategy if context else CleanupStrategy.SUGGEST,
+                    detection_method=OutlierDetectionMethod.IQR,
+                    handling_strategy=OutlierHandlingStrategy.FLAG_ONLY,
+                    cleaned_data=data.copy(),
+                    rollback_info={}
+                )
+        except Exception as e:
+            logger.error(f"Input validation error in outlier handler: {str(e)}")
             return OutlierResult(
                 is_successful=False,
                 cleanup_strategy_used=context.cleanup_strategy if context else CleanupStrategy.SUGGEST,

@@ -125,18 +125,25 @@ class CleanupService:
         start_time = datetime.utcnow()
 
         # Convert data to DataFrame if needed
-        if isinstance(request.data, pd.DataFrame):
-            data = request.data.copy()
-        else:
-            # Handle other data formats (dict, list, etc.)
-            try:
+        try:
+            if isinstance(request.data, pd.DataFrame):
+                data = request.data.copy()
+            else:
+                # Handle other data formats (dict, list, etc.)
                 if request.data is None:
                     data = pd.DataFrame()
                 else:
                     data = pd.DataFrame(request.data)
-            except Exception as e:
-                logger.error(f"Failed to convert data to DataFrame: {str(e)}")
-                data = pd.DataFrame()
+
+            # Validate DataFrame
+            if not isinstance(data, pd.DataFrame):
+                raise ValueError("Data is not a valid DataFrame")
+
+            logger.info(f"Data loaded successfully: {len(data)} rows, {len(data.columns)} columns")
+
+        except Exception as e:
+            logger.error(f"Failed to convert data to DataFrame: {str(e)}")
+            data = pd.DataFrame()
 
         # Store original dimensions
         try:

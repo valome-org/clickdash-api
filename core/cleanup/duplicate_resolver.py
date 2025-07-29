@@ -105,7 +105,19 @@ class DuplicateResolver(CleanupInterface):
                     rollback_info={}
                 )
 
-            if not self.validate_input(data):
+            try:
+                if not self.validate_input(data):
+                    logger.warning("Input validation failed for duplicate resolver")
+                    return DuplicateResult(
+                        is_successful=False,
+                        cleanup_strategy_used=context.cleanup_strategy if context else CleanupStrategy.SUGGEST,
+                        detection_type=DuplicateDetectionType.EXACT,
+                        resolution_strategy=DuplicateResolutionStrategy.FLAG_ONLY,
+                        cleaned_data=data.copy(),
+                        rollback_info={}
+                    )
+            except Exception as e:
+                logger.error(f"Input validation error in duplicate resolver: {str(e)}")
                 return DuplicateResult(
                     is_successful=False,
                     cleanup_strategy_used=context.cleanup_strategy if context else CleanupStrategy.SUGGEST,

@@ -167,7 +167,7 @@ class CleanupInterface(ABC):
         if data is None:
             return False
         if hasattr(data, 'empty'):
-            return not data.empty
+            return len(data) > 0
         return True
 
     def estimate_impact(self, data: pd.DataFrame, issues: List[CleanupIssue]) -> Dict[str, Any]:

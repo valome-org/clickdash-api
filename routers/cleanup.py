@@ -53,14 +53,27 @@ async def cleanup_file(
         filename = file.filename or "unknown"
 
         # Load data based on file type
-        if filename.endswith('.csv'):
-            content = await file.read()
-            data = pd.read_csv(io.StringIO(content.decode('utf-8')))
-        elif filename.endswith(('.xlsx', '.xls')):
-            content = await file.read()
-            data = pd.read_excel(io.BytesIO(content))
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file format. Please use CSV or Excel files.")
+        try:
+            if filename.endswith('.csv'):
+                content = await file.read()
+                data = pd.read_csv(io.StringIO(content.decode('utf-8')))
+            elif filename.endswith(('.xlsx', '.xls')):
+                content = await file.read()
+                data = pd.read_excel(io.BytesIO(content))
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported file format. Please use CSV or Excel files.")
+
+            # Ensure data is a valid DataFrame
+            if not isinstance(data, pd.DataFrame):
+                raise ValueError("Failed to load data as DataFrame")
+
+            # Check if DataFrame is empty
+            if len(data) == 0:
+                raise ValueError("Uploaded file contains no data")
+
+        except Exception as e:
+            logger.error(f"Failed to load file data: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Failed to load file: {str(e)}")
 
         # Create cleanup request
         cleanup_request = CleanupRequest(
