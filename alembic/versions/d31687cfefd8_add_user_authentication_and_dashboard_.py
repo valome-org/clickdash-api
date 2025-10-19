@@ -39,6 +39,26 @@ def upgrade() -> None:
     op.create_index(op.f('ix_users_user_id'), 'users', ['user_id'], unique=True)
     op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
 
+    # Ensure dashboards table exists for databases where an older empty
+    # initial migration didn't create it.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dashboards (
+            id SERIAL PRIMARY KEY,
+            dashboard_id VARCHAR NOT NULL UNIQUE,
+            title VARCHAR NOT NULL,
+            charts JSON NOT NULL,
+            insights TEXT NULL,
+            summary TEXT NULL,
+            key_metrics JSON NULL,
+            status VARCHAR NOT NULL DEFAULT 'ready',
+            file_url VARCHAR NULL,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ NULL
+        )
+        """
+    )
+
     # Create a default admin user for existing dashboards
     users_table = table('users',
         column('id', sa.Integer),

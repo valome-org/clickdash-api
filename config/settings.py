@@ -13,11 +13,35 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # File size limit (10MB)
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 10 * 1024 * 1024))
 
+def _normalize_db_url(url: str) -> str:
+    """Ensure SQLAlchemy uses psycopg (psycopg3) driver for PostgreSQL.
+
+    - Convert deprecated "postgres://" to "postgresql://"
+    - If no explicit driver is provided, force "+psycopg"
+    - Migrate old "+psycopg2" to "+psycopg"
+    """
+    if not url:
+        return url
+
+    # Heroku-style URLs use the deprecated postgres:// scheme
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    # If no driver specified, prefer psycopg (psycopg3)
+    if url.startswith("postgresql://") and "+" not in url.split("://", 1)[1].split("@", 1)[0]:
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    # Upgrade explicit psycopg2 to psycopg
+    if url.startswith("postgresql+psycopg2://"):
+        url = url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+
+    return url
+
 # Database Configuration
-DATABASE_URL = os.getenv(
+DATABASE_URL = _normalize_db_url(os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres@localhost:5432/clickdash_db"
-)
+    "postgresql+psycopg://postgres@localhost:5432/clickdash_db"
+))
 
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY")
