@@ -48,7 +48,7 @@ Configuration is loaded from environment variables in `config/settings.py`. Comm
 - `CORS_ORIGINS` (default: `http://localhost:3000`): Comma-separated list for CORS.
 - `LLM_MODEL` (default: `gemini`): LLM provider selection.
 - `OPENAI_MODEL` (default: `gpt-4-turbo-preview`): OpenAI model ID to use.
-- `GEMINI_MODEL` (default: `gemini-2.5-flash-preview-05-20`): Gemini model ID to use.
+- `GEMINI_MODEL` (default: `gemini-2.5-flash-preview-09-2025`): Gemini model ID to use.
 - `APP_TITLE`, `APP_DESCRIPTION`, `APP_VERSION`: OpenAPI metadata.
 
 Tip: You can place these in a local `.env` file and they will be loaded automatically.
@@ -63,7 +63,7 @@ UPLOAD_DIR=uploads
 CORS_ORIGINS=http://localhost:3000
 LLM_MODEL=gemini
 OPENAI_MODEL=gpt-4-turbo-preview
-GEMINI_MODEL=gemini-2.5-flash-preview-05-20
+GEMINI_MODEL=gemini-2.5-flash-preview-09-2025
 APP_TITLE=Excel Dashboard AI API
 APP_DESCRIPTION=Convert Excel files to interactive dashboards using AI
 APP_VERSION=1.0.0

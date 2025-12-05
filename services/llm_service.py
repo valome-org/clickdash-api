@@ -146,20 +146,27 @@ class LLMService:
         number_of_charts = options.get("number_of_charts", 3) if options else 3
         description = options.get("description") if options else None
 
+        # Capture data availability to help the LLM adapt to sparse datasets
+        availability = {
+            "rows": data_summary["shape"]["rows"],
+            "columns": data_summary["shape"]["columns"],
+            "numeric_columns_count": len(data_summary["columns"]["numeric"]),
+            "categorical_columns_count": len(data_summary["columns"]["categorical"]),
+            "has_data": data_summary["shape"]["rows"] > 0 and data_summary["shape"]["columns"] > 0,
+        }
+
         # Build the prompt with user preferences
         category_guidance = ""
         if category:
             category_guidance = f"""
-            IMPORTANT: This data is related to {category}. Tailor your analysis to this specific domain.
-            Consider metrics, trends, and insights that would be most valuable for {category} data.
+            Optional domain context: {category}. Use it only when it aligns with the observed columns; do not invent fields or assumptions not supported by the data.
             """
 
         chart_type_guidance = ""
         if chart_types:
             chart_types_str = ", ".join(chart_types)
             chart_type_guidance = f"""
-            IMPORTANT: Focus on creating the following chart types: {chart_types_str}.
-            Prioritize these chart types in your recommendations.
+            Prefer the following chart types when they fit the data: {chart_types_str}. Fall back to better-suited chart types if these do not make sense for the available fields.
             """
 
         description_guidance = ""
@@ -168,30 +175,31 @@ class LLMService:
             ADDITIONAL CONTEXT FROM USER:
             {description}
 
-            Use this information to guide your analysis and highlight relevant aspects of the data.
+            Use this information to guide your analysis when compatible with the observed data.
             """
 
         # Build complete prompt
         prompt = f"""
         You are an expert data analyst and visualization specialist with deep business intelligence experience.
-        Analyze this Excel dataset with creativity and precision to create a comprehensive, insightful dashboard.
+        Analyze this dataset based strictly on the provided summary. Prioritize evidence from the data; do not assume domain-specific fields or trends that are not present.
 
         Dataset Summary:
         {json.dumps(data_summary, indent=2, cls=CustomJSONEncoder)}
+        Data Availability:
+        {json.dumps(availability, indent=2, cls=CustomJSONEncoder)}
 
         {category_guidance}
         {chart_type_guidance}
         {description_guidance}
 
         ANALYSIS REQUIREMENTS:
-        1. **Be Creative & Comprehensive**: Generate exactly {number_of_charts} diverse, meaningful charts that tell a complete story
-        2. **Chart Variety**: Use appropriate chart types that best visualize the data patterns
-        3. **Business Intelligence**: Focus on actionable insights, trends, patterns, and anomalies
-        4. **Precision**: Use exact column names, proper aggregations, and meaningful metrics
-        5. **Visual Appeal**: Choose appropriate color schemes and ensure charts are visually distinct
-        6. **Data-Driven**: Base recommendations on actual data patterns, correlations, and distributions
-        7. **Interactive Features**: Add suggestions for interactive features that would enhance each chart
-        8. **Rich Metadata**: Include detailed metadata for each visualization
+        1. **Be Data-Driven & Adaptive**: Generate up to {number_of_charts} charts that make sense for the available fields; if data is sparse or empty, produce fewer charts and clearly explain the limitation.
+        2. **Chart Suitability**: Choose chart types that match the data types and available columns; avoid any chart that would require missing fields.
+        3. **Business Intelligence**: Focus on actionable insights, trends, patterns, and anomalies grounded in the observed data.
+        4. **Precision**: Use exact column names, proper aggregations, and meaningful metrics; do not fabricate columns or values.
+        5. **Visual Distinction**: Ensure charts are visually distinct with thoughtful color schemes.
+        6. **Interactive Features**: Add suggestions for interactive features that would enhance each chart.
+        7. **Rich Metadata**: Include detailed metadata for each visualization.
 
         Return your response as a JSON object with this EXACT structure:
         {{

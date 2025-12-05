@@ -35,7 +35,7 @@ DATABASE_URL=postgresql://clickdash_user:your_password@localhost:5432/clickdash_
 # LLM Configuration
 LLM_MODEL=gemini
 OPENAI_MODEL=gpt-4-turbo-preview
-GEMINI_MODEL=gemini-2.5-flash-preview-05-20
+GEMINI_MODEL=gemini-2.5-flash-preview-09-2025
 OPENAI_API_KEY=your-openai-api-key-here
 GOOGLE_API_KEY=your-google-api-key-here
 
