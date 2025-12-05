@@ -141,9 +141,6 @@ class LLMService:
         """Create an enhanced analysis prompt for the LLM that incorporates user preferences"""
 
         # Process user options
-        category = options.get("category") if options else None
-        chart_types = options.get("chart_types", []) if options else []
-        number_of_charts = options.get("number_of_charts", 3) if options else 3
         description = options.get("description") if options else None
 
         # Capture data availability to help the LLM adapt to sparse datasets
@@ -154,20 +151,6 @@ class LLMService:
             "categorical_columns_count": len(data_summary["columns"]["categorical"]),
             "has_data": data_summary["shape"]["rows"] > 0 and data_summary["shape"]["columns"] > 0,
         }
-
-        # Build the prompt with user preferences
-        category_guidance = ""
-        if category:
-            category_guidance = f"""
-            Optional domain context: {category}. Use it only when it aligns with the observed columns; do not invent fields or assumptions not supported by the data.
-            """
-
-        chart_type_guidance = ""
-        if chart_types:
-            chart_types_str = ", ".join(chart_types)
-            chart_type_guidance = f"""
-            Prefer the following chart types when they fit the data: {chart_types_str}. Fall back to better-suited chart types if these do not make sense for the available fields.
-            """
 
         description_guidance = ""
         if description:
@@ -188,12 +171,10 @@ class LLMService:
         Data Availability:
         {json.dumps(availability, indent=2, cls=CustomJSONEncoder)}
 
-        {category_guidance}
-        {chart_type_guidance}
         {description_guidance}
 
         ANALYSIS REQUIREMENTS:
-        1. **Be Data-Driven & Adaptive**: Generate up to {number_of_charts} charts that make sense for the available fields; if data is sparse or empty, produce fewer charts and clearly explain the limitation.
+        1. **Be Data-Driven & Adaptive**: Generate at least 4 charts that make sense for the available fields; if data is sparse or empty, produce fewer charts and clearly explain the limitation.
         2. **Chart Suitability**: Choose chart types that match the data types and available columns; avoid any chart that would require missing fields.
         3. **Business Intelligence**: Focus on actionable insights, trends, patterns, and anomalies grounded in the observed data.
         4. **Precision**: Use exact column names, proper aggregations, and meaningful metrics; do not fabricate columns or values.
