@@ -34,6 +34,8 @@ DATABASE_URL=postgresql://clickdash_user:your_password@localhost:5432/clickdash_
 
 # LLM Configuration
 LLM_MODEL=gemini
+OPENAI_MODEL=gpt-4-turbo-preview
+GEMINI_MODEL=gemini-2.5-flash-preview-05-20
 OPENAI_API_KEY=your-openai-api-key-here
 GOOGLE_API_KEY=your-google-api-key-here
 
@@ -63,19 +65,19 @@ uvicorn main:app --reload
 
 ### Dashboard Table
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | Integer | Primary key |
-| dashboard_id | String | Unique dashboard identifier |
-| title | String | Dashboard title |
-| charts | JSON | Chart configurations |
-| insights | Text | Dashboard insights |
-| summary | Text | Dashboard summary |
-| key_metrics | JSON | Key metrics data |
-| status | String | Dashboard status |
-| file_url | String | Original file URL |
-| created_at | DateTime | Creation timestamp |
-| updated_at | DateTime | Update timestamp |
+| Column       | Type     | Description                 |
+| ------------ | -------- | --------------------------- |
+| id           | Integer  | Primary key                 |
+| dashboard_id | String   | Unique dashboard identifier |
+| title        | String   | Dashboard title             |
+| charts       | JSON     | Chart configurations        |
+| insights     | Text     | Dashboard insights          |
+| summary      | Text     | Dashboard summary           |
+| key_metrics  | JSON     | Key metrics data            |
+| status       | String   | Dashboard status            |
+| file_url     | String   | Original file URL           |
+| created_at   | DateTime | Creation timestamp          |
+| updated_at   | DateTime | Update timestamp            |
 
 ## API Changes
 

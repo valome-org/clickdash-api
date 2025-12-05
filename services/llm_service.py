@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 import google.generativeai as genai
 import pandas as pd
-from config.settings import LLM_MODEL
+from config.settings import GEMINI_MODEL, LLM_MODEL, OPENAI_MODEL
 from openai import OpenAI
 from utils.serialization import CustomJSONEncoder, make_json_serializable
 
@@ -82,7 +82,7 @@ class LLMService:
         """Analyze data using OpenAI's API"""
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a data visualization expert that creates insightful dashboards."},
                     {"role": "user", "content": prompt}
@@ -105,7 +105,7 @@ class LLMService:
     async def _analyze_with_gemini(self, prompt: str) -> Dict[str, Any]:
         """Analyze data using Google's Gemini API"""
         try:
-            model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+            model = genai.GenerativeModel(GEMINI_MODEL)
             response = model.generate_content(prompt)
             result_text = response.text
 
