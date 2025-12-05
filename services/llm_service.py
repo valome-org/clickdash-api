@@ -55,6 +55,22 @@ class LLMService:
                 corr_matrix = df[analysis['numeric_columns']].corr().to_dict()
                 data_summary["correlations"] = make_json_serializable(corr_matrix)
 
+        # Add value counts for categorical columns (top 5)
+        if len(analysis['categorical_columns']) > 0:
+            categorical_stats = {}
+            for col in analysis['categorical_columns']:
+                try:
+                    # Get top 5 values and their counts
+                    value_counts = df[col].value_counts().head(5).to_dict()
+                    unique_count = df[col].nunique()
+                    categorical_stats[col] = {
+                        "top_values": value_counts,
+                        "unique_count": unique_count
+                    }
+                except Exception as e:
+                    print(f"Error calculating stats for {col}: {str(e)}")
+            data_summary["categorical_stats"] = make_json_serializable(categorical_stats)
+
         # Try to add time series information if available
         time_columns = [col for col in df.columns if analysis['data_types'].get(col) in ['datetime64', 'date', 'time']]
         if time_columns:
@@ -181,11 +197,14 @@ class LLMService:
         5. **Visual Distinction**: Ensure charts are visually distinct with thoughtful color schemes.
         6. **Interactive Features**: Add suggestions for interactive features that would enhance each chart.
         7. **Rich Metadata**: Include detailed metadata for each visualization.
+        8. **Storytelling**: Arrange the charts in a logical order that tells a coherent story about the data.
+        9. **Reasoning**: Briefly explain your reasoning for selecting these specific charts and metrics.
 
         Return your response as a JSON object with this EXACT structure:
         {{
             "dashboard_title": "Meaningful title for the dashboard",
             "summary": "Brief 2-3 sentence summary of what the data represents",
+            "analysis_reasoning": "Brief explanation of your approach and why you selected these specific charts",
             "key_metrics": [
                 {{"metric": "Metric Name", "value": "Value", "description": "What this means"}},
                 {{"metric": "Another Metric", "value": "Value", "description": "What this means"}}
