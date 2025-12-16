@@ -21,7 +21,6 @@ class DashboardService:
             limit = data_config.get("limit", 15)
             sort_order = data_config.get("sort", "desc")
             show_percentages = data_config.get("show_percentages", False)
-            group_by = data_config.get("group_by", None)
 
             if not source_columns or not all(col in df.columns for col in source_columns):
                 # Fallback to first available columns
@@ -154,7 +153,7 @@ class DashboardService:
 
         return make_json_serializable(chart_data)
 
-    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int, chart_config: dict) -> dict:
+    def _generate_line_chart_data(self, df: pd.DataFrame, source_columns: list, limit: int) -> dict:
         """Generate data for line charts with enhanced time series support"""
         column = source_columns[0]
 
